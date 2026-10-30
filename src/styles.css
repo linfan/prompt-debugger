@@ -137,7 +137,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .panel-caption { height: 41px; flex: 0 0 41px; padding: 0 10px 0 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #edf0f4; color: #98a2af; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
 .panel-caption b { margin-left: 5px; padding: 2px 5px; border-radius: 4px; color: #7d8b9c; background: #f0f3f6; font-size: 8px; }
 .message-list { flex: 1; min-height: 0; overflow-y: auto; padding: 7px; }
-.message-list-item { width: 100%; min-height: 58px; display: flex; align-items: flex-start; gap: 9px; padding: 11px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
+.message-list-item { width: 100%; min-height: 58px; display: flex; align-items: center; gap: 9px; padding: 11px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
+.message-list-item.has-meta { align-items: flex-start; }
+.message-list-item:not(.has-meta) .message-item-topline { display: none; }
+.message-list-item:not(.has-meta) .message-preview { margin-top: 0; }
 .message-list-item + .message-list-item { margin-top: 3px; }
 .message-list-item:hover { background: #f8fafc; }
 .message-list-item.selected { border-color: #62a2db; background: #f0f7fd; box-shadow: 0 0 0 1px #62a2db12; }

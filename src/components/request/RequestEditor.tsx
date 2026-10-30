@@ -95,7 +95,8 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
           {request.messages.map((item, index) => {
             const calls = Array.isArray(item.tool_calls) ? item.tool_calls : [];
             const images = messageImageCount(item);
-            return <button key={index} className={`message-list-item ${selected === index ? "selected" : ""}`} onClick={() => { setSelected(index); setRawEditing(false); }}>
+            const hasMeta = calls.length > 0 || images > 0;
+            return <button key={index} className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""}`} onClick={() => { setSelected(index); setRawEditing(false); }}>
               <span className={`role-badge role-${item.role}`}>{item.role}</span>
               <span className="message-item-body">
                 <span className="message-item-topline">
