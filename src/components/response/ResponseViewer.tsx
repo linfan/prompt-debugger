@@ -36,23 +36,24 @@ export function ResponseViewer({ response, name, streaming = false }: { response
     {response.warnings.length > 0 && <div className="parse-warnings">{response.warnings.map((warning, index) => <p key={index}>{warning}</p>)}</div>}
     {mode === "raw" ? <div className="response-raw">{json !== null ? <JsonTree value={json} label="response" /> : <pre>{response.raw || "No response content yet."}</pre>}</div> : <div className="response-scroll">
       {!choice ? <div className="response-empty"><MessageSquareText size={25} /><h2>No completion choices</h2><p>The response may contain an error or a non-standard payload. Check Raw for details.</p></div> : <>
-        <section className="response-card">
-          <header><div><Brain size={17} /><h2>Reasoning</h2></div>{choice.reasoningContent && copyButton("reasoning", choice.reasoningContent)}</header>
-          {choice.reasoningContent ? <pre className="response-text">{choice.reasoningContent}</pre> : <p className="response-card-empty">No reasoning content in this choice.</p>}
-        </section>
-        <section className="response-card">
-          <header><div><MessageSquareText size={17} /><h2>Content</h2></div>{choice.content && copyButton("content", choice.content)}</header>
-          {choice.content ? <pre className="response-text">{choice.content}</pre> : <p className="response-card-empty">No text content in this choice.</p>}
-        </section>
-        <section className="response-card">
-          <header><div><Wrench size={17} /><h2>Function Calls</h2><span className="card-count">{choice.toolCalls.length}</span></div>{choice.toolCalls.length > 0 && copyButton("tool calls", choice.toolCalls.map((call) => `${call.name}(${call.arguments})`).join("\n"))}</header>
-          {choice.toolCalls.length === 0 ? <p className="response-card-empty">No function calls in this choice.</p> : <div className="response-calls">{choice.toolCalls.map((call, index) => {
+        {choice.reasoningContent && <section className="response-card">
+          <header><div><Brain size={17} /><h2>Reasoning</h2></div>{copyButton("reasoning", choice.reasoningContent)}</header>
+          <pre className="response-text">{choice.reasoningContent}</pre>
+        </section>}
+        {choice.content && <section className="response-card">
+          <header><div><MessageSquareText size={17} /><h2>Content</h2></div>{copyButton("content", choice.content)}</header>
+          <pre className="response-text">{choice.content}</pre>
+        </section>}
+        {choice.toolCalls.length > 0 && <section className="response-card">
+          <header><div><Wrench size={17} /><h2>Function Calls</h2><span className="card-count">{choice.toolCalls.length}</span></div>{copyButton("tool calls", choice.toolCalls.map((call) => `${call.name}(${call.arguments})`).join("\n"))}</header>
+          <div className="response-calls">{choice.toolCalls.map((call, index) => {
             let argumentsJson: unknown;
             let validArguments = false;
             try { argumentsJson = JSON.parse(call.arguments); validArguments = true; } catch { validArguments = false; }
             return <article className="response-call" key={`${call.index}-${index}`}><div className="response-call-title"><h3>Call {index + 1}</h3>{copyButton(`call ${index + 1}`, call.arguments)}</div><dl><dt>Function</dt><dd>{call.name || "(unnamed)"}</dd><dt>ID</dt><dd>{call.id || "(not provided)"}</dd></dl><div className="argument-label">ARGUMENTS</div>{validArguments ? <JsonTree value={argumentsJson} label="arguments" /> : <pre className="argument-raw">{call.arguments || "(empty)"}</pre>}</article>;
-          })}</div>}
-        </section>
+          })}</div>
+        </section>}
+        {!choice.reasoningContent && !choice.content && choice.toolCalls.length === 0 && <div className="response-empty"><MessageSquareText size={25} /><h2>Nothing to display</h2><p>This choice contains no reasoning, text content, or function calls. Check Raw for details.</p></div>}
         {choice.finishReason && <div className="finish-reason">FINISH REASON <span>{choice.finishReason}</span></div>}
       </>}
     </div>}
