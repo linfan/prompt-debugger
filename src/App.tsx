@@ -222,6 +222,7 @@ export default function App() {
         <div className="brand"><span className="brand-mark"><Braces size={19} /></span><span>Prompt Editor</span><span className="version">BETA</span></div>
         <div className="header-actions">
           <button className="button button-secondary" type="button" onClick={() => void openDirectory()}><FolderOpen size={16} /> Open directory</button>
+          <button className="button button-secondary" type="button" disabled={sending} onClick={() => { if (tab === "request" && !confirmDiscard()) return; setPasteText(""); setError(""); setPasteTarget(tab); }}><Clipboard size={15} /> Paste</button>
           <button className="icon-button header-settings" type="button" aria-label="API settings" title="API settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
           <button className={`button ${sending ? "button-danger" : "button-primary"}`} type="button" disabled={!sending && (!request || Boolean(sourceError))} onClick={() => sending ? void cancelRequest() : void sendRequest()}>{sending ? <Square size={13} /> : <Send size={15} />} {sending ? "Cancel" : "Send request"}</button>
         </div>

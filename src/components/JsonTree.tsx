@@ -20,12 +20,12 @@ export function JsonTree({ value, label = "root" }: { value: unknown; label?: st
 
   const renderValue = (current: unknown, key: string, path: string, depth: number): React.ReactNode => {
     const complex = isRecord(current) || Array.isArray(current);
-    if (!complex) return <div className="json-row" style={{ paddingLeft: depth * 17 }}><span className="json-spacer" /><span className="json-key">{key}</span><span className="json-colon">:</span>{primitive(current)}</div>;
+    if (!complex) return <div key={path} className="json-row" style={{ paddingLeft: depth * 17 }}><span className="json-spacer" /><span className="json-key">{key}</span><span className="json-colon">:</span>{primitive(current)}</div>;
     const entries = Array.isArray(current) ? current.map((item, index) => [String(index), item] as const) : Object.entries(current);
     const isCollapsed = collapsed.has(path);
     const open = Array.isArray(current) ? "[" : "{";
     const close = Array.isArray(current) ? "]" : "}";
-    return <div>
+    return <div key={path}>
       <div className="json-row json-branch" style={{ paddingLeft: depth * 17 }} onClick={() => toggle(path)}>
         <button aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${key}`}>{isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</button>
         <span className="json-key">{key}</span><span className="json-colon">:</span><span className="json-brace">{open}</span>

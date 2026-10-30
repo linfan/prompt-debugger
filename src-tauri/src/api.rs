@@ -53,7 +53,7 @@ async fn perform_request(
     url: String,
     token: String,
     payload: Value,
-    channel: Channel<String>,
+    on_chunk: &(dyn Fn(String) -> Result<(), String> + Send + Sync),
     cancelled: CancellationToken,
 ) -> Result<ApiCompletion, String> {
     let client = reqwest::Client::new();
@@ -85,7 +85,7 @@ async fn perform_request(
                 Some(Ok(bytes)) => {
                     let text = decode_utf8(&mut pending, &bytes, false);
                     if !text.is_empty() {
-                        channel.send(text).map_err(|_| "Response window was closed.".to_string())?;
+                        on_chunk(text)?;
                     }
                 }
                 Some(Err(error)) => return Err(redact(format!("Stream interrupted: {error}"), &token)),
@@ -94,7 +94,7 @@ async fn perform_request(
         }
         let remaining = decode_utf8(&mut pending, &[], true);
         if !remaining.is_empty() {
-            channel.send(remaining).map_err(|_| "Response window was closed.".to_string())?;
+            on_chunk(remaining)?;
         }
         Ok(ApiCompletion { format: "sse".into() })
     } else {
@@ -102,7 +102,7 @@ async fn perform_request(
             result = response.text() => result.map_err(|error| redact(error.to_string(), &token))?,
             _ = cancelled.cancelled() => return Err("Request cancelled.".into()),
         };
-        channel.send(text).map_err(|_| "Response window was closed.".to_string())?;
+        on_chunk(text)?;
         Ok(ApiCompletion { format: "json".into() })
     }
 }
@@ -119,7 +119,8 @@ pub async fn send_chat_completion(
     let cancelled = CancellationToken::new();
     state.0.lock().map_err(|_| "API state lock failed.".to_string())?
         .insert(request_id.clone(), cancelled.clone());
-    let result = perform_request(url, token, payload, channel, cancelled).await;
+    let on_chunk = |text| channel.send(text).map_err(|_| "Response window was closed.".to_string());
+    let result = perform_request(url, token, payload, &on_chunk, cancelled).await;
     state.0.lock().map_err(|_| "API state lock failed.".to_string())?.remove(&request_id);
     result
 }
@@ -153,5 +154,43 @@ mod tests {
         let mut pending = Vec::new();
         let output = decode_utf8(&mut pending, &[b'a', 0xff, b'b'], true);
         assert_eq!(output, "a\u{fffd}b");
+    }
+
+    #[tokio::test]
+    async fn sends_authorization_and_reads_mock_sse_response() {
+        use super::perform_request;
+        use serde_json::json;
+        use std::sync::Mutex;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        use tokio_util::sync::CancellationToken;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0; 8192];
+            let length = socket.read(&mut buffer).await.unwrap();
+            let request = String::from_utf8_lossy(&buffer[..length]);
+            assert!(request.to_ascii_lowercase().contains("authorization: bearer test-token"));
+            let body = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"你好\"}}]}\n\ndata: [DONE]\n\n";
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        let received = Mutex::new(String::new());
+        let on_chunk = |chunk: String| {
+            received.lock().unwrap().push_str(&chunk);
+            Ok(())
+        };
+        let result = perform_request(
+            format!("http://{address}/v1/chat/completions"),
+            "test-token".into(),
+            json!({"stream": true}),
+            &on_chunk,
+            CancellationToken::new(),
+        ).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(result.format, "sse");
+        assert!(received.into_inner().unwrap().contains("你好"));
     }
 }
