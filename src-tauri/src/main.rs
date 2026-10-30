@@ -4,6 +4,7 @@ use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Emitter;
 
 mod workspace;
+mod api;
 
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let app_menu = SubmenuBuilder::new(app, "Prompt Editor")
@@ -83,6 +84,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(workspace::WorkspaceState::default())
+        .manage(api::ApiState::default())
         .invoke_handler(tauri::generate_handler![
             workspace::open_workspace,
             workspace::list_workspace,
@@ -92,6 +94,8 @@ fn main() {
             workspace::create_workspace_entry,
             workspace::rename_workspace_entry,
             workspace::delete_workspace_entry,
+            api::send_chat_completion,
+            api::cancel_chat_completion,
         ])
         .setup(|app| {
             let menu = build_menu(app)?;

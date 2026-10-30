@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { Braces, ChevronRight, Clipboard, FolderOpen, Inbox, PanelLeftClose, PanelLeftOpen, Send, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Braces, ChevronRight, Clipboard, FolderOpen, Inbox, PanelLeftClose, PanelLeftOpen, Send, Settings2, Sparkles, Square, X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { WorkspaceSidebar } from "./components/workspace/WorkspaceSidebar";
 import { RequestEditor } from "./components/request/RequestEditor";
 import { ResponseViewer } from "./components/response/ResponseViewer";
+import { ApiSettings } from "./components/settings/ApiSettings";
 import type { WorkspaceFile, WorkspaceSnapshot } from "./lib/workspace";
 import { type ChatRequest, isRecord, parseChatRequest, parseCompletionJson } from "./lib/openai";
-import { parseCompletionSse } from "./lib/sse";
+import { CompletionSseParser, parseCompletionSse } from "./lib/sse";
 import { formatRequest } from "./lib/request";
 
 type Tab = "request" | "response";
@@ -26,6 +27,12 @@ export default function App() {
   const [pasteTarget, setPasteTarget] = useState<Tab | null>(null);
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState("");
+  const [apiUrl, setApiUrl] = useState(() => localStorage.getItem("prompt-editor.api-url") ?? "");
+  const [apiToken, setApiToken] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const activeRequestId = useRef<string | null>(null);
+  const requestGeneration = useRef(0);
   const dirty = Boolean(requestDoc && requestDoc.source !== requestDoc.savedSource);
   let sourceError = "";
   if (requestDoc) {
@@ -88,6 +95,54 @@ export default function App() {
     } catch (reason) { setError(String(reason)); }
   }, [dirty, request, requestDoc, sourceError]);
 
+  const sendRequest = useCallback(async () => {
+    if (!request || !requestDoc || sourceError || !apiUrl.trim() || sending) {
+      if (!apiUrl.trim()) setSettingsOpen(true);
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    const generation = ++requestGeneration.current;
+    activeRequestId.current = requestId;
+    const parser = new CompletionSseParser();
+    const channel = new Channel<string>();
+    let networkRaw = "";
+    setSending(true);
+    setTab("response");
+    setResponseDoc({ response: parser.snapshot(), name: "Live response" });
+    setError("");
+    channel.onmessage = (chunk) => {
+      if (generation !== requestGeneration.current) return;
+      networkRaw += chunk;
+      parser.feed(chunk);
+      setResponseDoc({ response: parser.snapshot(), name: "Live response" });
+    };
+    try {
+      const completion = await invoke<{ format: "json" | "sse" }>("send_chat_completion", {
+        requestId,
+        url: apiUrl.trim(),
+        token: apiToken,
+        payload: request,
+        channel,
+      });
+      if (generation !== requestGeneration.current) return;
+      const response = completion.format === "json" ? parseCompletionJson(networkRaw) : parser.finish();
+      setResponseDoc({ response, name: "Live response" });
+    } catch (reason) {
+      if (generation !== requestGeneration.current) return;
+      setResponseDoc({ response: parser.finish(), name: "Live response" });
+      setError(String(reason));
+    } finally {
+      if (generation === requestGeneration.current) {
+        setSending(false);
+        activeRequestId.current = null;
+      }
+    }
+  }, [apiToken, apiUrl, request, requestDoc, sending, sourceError]);
+
+  const cancelRequest = useCallback(async () => {
+    if (activeRequestId.current) await invoke("cancel_chat_completion", { requestId: activeRequestId.current });
+  }, []);
+
   const handleCommand = useCallback((command: string) => {
     if (command === "toggle-sidebar") setSidebarOpen((value) => !value);
     if (command === "show-request") setTab("request");
@@ -97,6 +152,10 @@ export default function App() {
     if (command === "save") void saveRequest();
     if (command === "help") setError("Open a directory or paste a request. Use ⌘1/⌘2 to switch views and ⌘S to save.");
   }, [closeWorkspace, openDirectory, saveRequest]);
+
+  useEffect(() => {
+    localStorage.setItem("prompt-editor.api-url", apiUrl);
+  }, [apiUrl]);
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -163,7 +222,8 @@ export default function App() {
         <div className="brand"><span className="brand-mark"><Braces size={19} /></span><span>Prompt Editor</span><span className="version">BETA</span></div>
         <div className="header-actions">
           <button className="button button-secondary" type="button" onClick={() => void openDirectory()}><FolderOpen size={16} /> Open directory</button>
-          <button className="button button-primary" type="button" disabled={!request || Boolean(sourceError)}><Send size={15} /> Send request</button>
+          <button className="icon-button header-settings" type="button" aria-label="API settings" title="API settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
+          <button className={`button ${sending ? "button-danger" : "button-primary"}`} type="button" disabled={!sending && (!request || Boolean(sourceError))} onClick={() => sending ? void cancelRequest() : void sendRequest()}>{sending ? <Square size={13} /> : <Send size={15} />} {sending ? "Cancel" : "Send request"}</button>
         </div>
       </header>
 
@@ -186,7 +246,7 @@ export default function App() {
             <span className="shortcut-hint">⌘1 / ⌘2</span>
           </div>
 
-          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : tab === "response" && responseDoc ? <ResponseViewer response={responseDoc.response} name={responseDoc.name} /> : currentFile ? <section className="file-preview">
+          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : tab === "response" && responseDoc ? <ResponseViewer response={responseDoc.response} name={responseDoc.name} streaming={sending && responseDoc.name === "Live response"} /> : currentFile ? <section className="file-preview">
             <div className="file-preview-heading"><div><span className="eyebrow">{currentFile.name.endsWith(".sse") ? "SSE STREAM" : "JSON DOCUMENT"}</span><h1>{currentFile.name}</h1><p>{currentFile.path}</p></div><button className="icon-button" title="Close file" aria-label="Close file" onClick={() => setCurrentFile(null)}><X size={17} /></button></div>
             <pre>{currentFile.content || "(empty file)"}</pre>
           </section> : <section className="empty-state">
@@ -198,6 +258,7 @@ export default function App() {
         </main>
       </div>
 
+      {settingsOpen && <ApiSettings url={apiUrl} token={apiToken} onUrlChange={setApiUrl} onTokenChange={setApiToken} onClose={() => setSettingsOpen(false)} />}
       {pasteTarget && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasteTarget(null); }}>
         <form className="dialog paste-dialog" onSubmit={(event) => { event.preventDefault(); try { if (pasteTarget === "request") loadRequest(pasteText); else loadResponse(pasteText); setPasteTarget(null); } catch (reason) { setError(String(reason)); } }}>
           <div className="dialog-title-row"><h2>{pasteTarget === "request" ? "Paste request JSON" : "Import response"}</h2><button type="button" className="icon-button" aria-label="Close paste dialog" onClick={() => setPasteTarget(null)}><X size={16} /></button></div>

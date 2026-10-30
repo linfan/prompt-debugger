@@ -235,3 +235,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .response-empty p { max-width: 350px; font-size: 11px; line-height: 1.6; }
 .response-raw > pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #52667a; font: 11px/1.75 "SFMono-Regular", Consolas, monospace; }
 @keyframes pulse { 50% { opacity: .45; } }
+
+.header-settings { margin-left: 2px; border: 1px solid #e1e6ec; background: white; }
+.api-dialog { width: min(480px, 100%); }
+.dialog-icon-title { display: flex; align-items: center; gap: 9px; }
+.dialog-icon-title > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: #4c83b5; background: #edf4fa; }
+.api-dialog > label { margin: 15px 0 6px; }
+.api-dialog > input { height: 38px; }
+.token-input { height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border: 1px solid #dce3eb; border-radius: 6px; color: #93a0ae; }
+.token-input input { flex: 1; min-width: 0; height: 34px; padding: 0; border: 0; outline: 0; color: #465c71; font-size: 12px; }
+.token-input button { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 4px; color: #8b98a6; background: transparent; cursor: pointer; }
+.security-note { margin-top: 13px; padding: 9px 10px; border-radius: 6px; color: #82909e; background: #f5f7fa; font-size: 10px; line-height: 1.55; }
