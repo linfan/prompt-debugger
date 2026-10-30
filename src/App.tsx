@@ -5,12 +5,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { WorkspaceSidebar } from "./components/workspace/WorkspaceSidebar";
 import { RequestEditor } from "./components/request/RequestEditor";
+import { ResponseViewer } from "./components/response/ResponseViewer";
 import type { WorkspaceFile, WorkspaceSnapshot } from "./lib/workspace";
-import { type ChatRequest, parseChatRequest } from "./lib/openai";
+import { type ChatRequest, isRecord, parseChatRequest, parseCompletionJson } from "./lib/openai";
+import { parseCompletionSse } from "./lib/sse";
 import { formatRequest } from "./lib/request";
 
 type Tab = "request" | "response";
 interface RequestDocument { source: string; savedSource: string; path?: string; name?: string }
+interface ResponseDocument { response: import("./lib/openai").ResponseAggregate; path?: string; name?: string }
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("request");
@@ -19,7 +22,8 @@ export default function App() {
   const [currentFile, setCurrentFile] = useState<WorkspaceFile | null>(null);
   const [request, setRequest] = useState<ChatRequest | null>(null);
   const [requestDoc, setRequestDoc] = useState<RequestDocument | null>(null);
-  const [pasteOpen, setPasteOpen] = useState(false);
+  const [responseDoc, setResponseDoc] = useState<ResponseDocument | null>(null);
+  const [pasteTarget, setPasteTarget] = useState<Tab | null>(null);
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState("");
   const dirty = Boolean(requestDoc && requestDoc.source !== requestDoc.savedSource);
@@ -39,6 +43,15 @@ export default function App() {
     setError("");
   }, []);
 
+  const loadResponse = useCallback((source: string, file?: WorkspaceFile) => {
+    const isSse = file?.name.endsWith(".sse") || /^(data|event|id|):/m.test(source);
+    const response = isSse ? parseCompletionSse(source) : parseCompletionJson(source);
+    setResponseDoc({ response, path: file?.path, name: file?.name });
+    setCurrentFile(null);
+    setTab("response");
+    setError("");
+  }, []);
+
   const openDirectory = useCallback(async () => {
     if (!confirmDiscard()) return;
     try {
@@ -49,6 +62,7 @@ export default function App() {
       setCurrentFile(null);
       setRequest(null);
       setRequestDoc(null);
+      setResponseDoc(null);
       setSidebarOpen(true);
       setError("");
     } catch (reason) { setError(String(reason)); }
@@ -61,6 +75,7 @@ export default function App() {
     setCurrentFile(null);
     setRequest(null);
     setRequestDoc(null);
+    setResponseDoc(null);
   }, [confirmDiscard]);
 
   const saveRequest = useCallback(async () => {
@@ -106,12 +121,11 @@ export default function App() {
     if (!confirmDiscard()) return;
     try {
       const file = await invoke<WorkspaceFile>("read_workspace_file", { path });
-      if (path.endsWith(".json")) loadRequest(file.content, file);
-      else {
-        setCurrentFile(file);
-        setTab("response");
-        setError("");
-      }
+      if (path.endsWith(".json")) {
+        const value: unknown = JSON.parse(file.content);
+        if (isRecord(value) && Array.isArray(value.messages)) loadRequest(file.content, file);
+        else loadResponse(file.content, file);
+      } else loadResponse(file.content, file);
     } catch (reason) { setError(String(reason)); }
   };
 
@@ -122,12 +136,14 @@ export default function App() {
     setWorkspace(await invoke("rename_workspace_entry", { path, newName }));
     const renamed = `${path.split("/").slice(0, -1).join("/")}${path.includes("/") ? "/" : ""}${newName}`;
     if (requestDoc?.path === path) setRequestDoc({ ...requestDoc, path: renamed, name: newName });
+    if (responseDoc?.path === path) setResponseDoc({ ...responseDoc, path: renamed, name: newName });
     if (currentFile?.path === path) setCurrentFile({ ...currentFile, path: renamed, name: newName });
   };
   const deleteEntry = async (path: string) => {
     if (requestDoc?.path && (requestDoc.path === path || requestDoc.path.startsWith(`${path}/`)) && !confirmDiscard()) return;
     setWorkspace(await invoke("delete_workspace_entry", { path }));
     if (requestDoc?.path && (requestDoc.path === path || requestDoc.path.startsWith(`${path}/`))) { setRequest(null); setRequestDoc(null); }
+    if (responseDoc?.path && (responseDoc.path === path || responseDoc.path.startsWith(`${path}/`))) setResponseDoc(null);
     if (currentFile && (currentFile.path === path || currentFile.path.startsWith(`${path}/`))) setCurrentFile(null);
   };
 
@@ -158,7 +174,7 @@ export default function App() {
             {sidebarOpen && <span>WORKSPACE</span>}
             <button className="icon-button" type="button" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"} title="Toggle sidebar (⌘B)" onClick={() => setSidebarOpen((value) => !value)}>{sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>
           </div>
-          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={requestDoc?.path ?? currentFile?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
+          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={(tab === "request" ? requestDoc?.path : responseDoc?.path) ?? currentFile?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
         </aside>
 
         <main className="main-panel">
@@ -170,25 +186,25 @@ export default function App() {
             <span className="shortcut-hint">⌘1 / ⌘2</span>
           </div>
 
-          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : currentFile ? <section className="file-preview">
+          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : tab === "response" && responseDoc ? <ResponseViewer response={responseDoc.response} name={responseDoc.name} /> : currentFile ? <section className="file-preview">
             <div className="file-preview-heading"><div><span className="eyebrow">{currentFile.name.endsWith(".sse") ? "SSE STREAM" : "JSON DOCUMENT"}</span><h1>{currentFile.name}</h1><p>{currentFile.path}</p></div><button className="icon-button" title="Close file" aria-label="Close file" onClick={() => setCurrentFile(null)}><X size={17} /></button></div>
             <pre>{currentFile.content || "(empty file)"}</pre>
           </section> : <section className="empty-state">
             <div className="empty-illustration">{tab === "request" ? <Sparkles size={30} strokeWidth={1.5} /> : <Inbox size={30} strokeWidth={1.5} />}</div>
             <h1>{tab === "request" ? "Shape a better prompt" : "Inspect every detail"}</h1>
             <p>{tab === "request" ? "Paste an OpenAI chat completion request, or open a JSON file from your workspace." : "Run a request or import a JSON / SSE response to see its rendered content."}</p>
-            <button className="button button-secondary" type="button" onClick={() => { if (tab === "request") { setPasteText(""); setError(""); setPasteOpen(true); } }}><Clipboard size={15} />{tab === "request" ? "Paste request" : "Import response"}</button>
+            <button className="button button-secondary" type="button" onClick={() => { setPasteText(""); setError(""); setPasteTarget(tab); }}><Clipboard size={15} />{tab === "request" ? "Paste request" : "Import response"}</button>
           </section>}
         </main>
       </div>
 
-      {pasteOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasteOpen(false); }}>
-        <form className="dialog paste-dialog" onSubmit={(event) => { event.preventDefault(); try { loadRequest(pasteText); setPasteOpen(false); } catch (reason) { setError(String(reason)); } }}>
-          <div className="dialog-title-row"><h2>Paste request JSON</h2><button type="button" className="icon-button" aria-label="Close paste dialog" onClick={() => setPasteOpen(false)}><X size={16} /></button></div>
-          <p>Paste a complete OpenAI Chat Completions request, including its messages array.</p>
-          <textarea autoFocus value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder={'{"model":"gpt-4o","messages":[...]}'} spellCheck={false} />
+      {pasteTarget && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasteTarget(null); }}>
+        <form className="dialog paste-dialog" onSubmit={(event) => { event.preventDefault(); try { if (pasteTarget === "request") loadRequest(pasteText); else loadResponse(pasteText); setPasteTarget(null); } catch (reason) { setError(String(reason)); } }}>
+          <div className="dialog-title-row"><h2>{pasteTarget === "request" ? "Paste request JSON" : "Import response"}</h2><button type="button" className="icon-button" aria-label="Close paste dialog" onClick={() => setPasteTarget(null)}><X size={16} /></button></div>
+          <p>{pasteTarget === "request" ? "Paste a complete OpenAI Chat Completions request, including its messages array." : "Paste a complete Chat Completions JSON response or an SSE event stream."}</p>
+          <textarea autoFocus value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder={pasteTarget === "request" ? '{"model":"gpt-4o","messages":[...]}' : '{"choices":[...]} or data: {...}'} spellCheck={false} />
           {error && <p className="field-error">{error}</p>}
-          <div className="dialog-actions"><button type="button" className="button button-secondary" onClick={() => setPasteOpen(false)}>Cancel</button><button className="button button-primary" disabled={!pasteText.trim()}><ChevronRight size={14} /> Open request</button></div>
+          <div className="dialog-actions"><button type="button" className="button button-secondary" onClick={() => setPasteTarget(null)}>Cancel</button><button className="button button-primary" disabled={!pasteText.trim()}><ChevronRight size={14} /> {pasteTarget === "request" ? "Open request" : "Open response"}</button></div>
         </form>
       </div>}
     </div>
