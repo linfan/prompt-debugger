@@ -144,6 +144,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .message-list-item + .message-list-item { margin-top: 3px; }
 .message-list-item:hover { background: #f8fafc; }
 .message-list-item.selected { border-color: #62a2db; background: #f0f7fd; box-shadow: 0 0 0 1px #62a2db12; }
+.message-list-item.dragging { opacity: .45; }
+.message-list-item.drag-over { border-color: #62a2db; background: #f0f7fd; outline: 2px dashed #8ebde6; outline-offset: -2px; }
 .role-badge { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 49px; height: 23px; padding: 0 8px; border-radius: 5px; color: white; font-size: 10px; font-weight: 600; text-transform: capitalize; }
 .role-system { background: var(--system); }
 .role-user { background: var(--user); }
@@ -171,7 +173,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .rendered-message > .content-field:not(.compact) textarea { flex: 1; min-height: 170px; resize: none; }
 .field-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 15px; }
 .field-row label { flex: 1; }
-.field-row .delete-message { margin-bottom: 2px; color: #b67b82; }
+.detail-toolbar .delete-message { color: #b67b82; }
 .rendered-message label, .image-part { display: flex; flex-direction: column; gap: 6px; color: #9aa4b0; font-size: 8px; font-weight: 700; letter-spacing: .08em; }
 .rendered-message input, .image-part input { height: 32px; padding: 0 9px; border: 1px solid #dfe5ec; border-radius: 5px; color: #53677b; background: white; font-size: 10px; font-weight: 400; letter-spacing: normal; }
 .rendered-message select { width: 100%; height: 32px; padding: 0 8px; border: 1px solid #dfe5ec; border-radius: 5px; color: #53677b; background: white; font-size: 10px; font-weight: 400; }

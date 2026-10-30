@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   Braces,
   Check,
@@ -40,6 +41,11 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
   const [rawDraft, setRawDraft] = useState("");
   const [rawError, setRawError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const dragState = useRef<{ from: number; to: number; startX: number; startY: number; active: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
   const message = request.messages[Math.min(selected, request.messages.length - 1)];
 
   useEffect(() => {
@@ -48,6 +54,62 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
 
   const updateCurrent = (updater: (message: ChatMessage) => ChatMessage) => {
     if (message) onChange(updateMessage(request, selected, updater));
+  };
+
+  const moveMessage = (from: number, to: number) => {
+    if (from === to) return;
+    const messages = [...request.messages];
+    const [moved] = messages.splice(from, 1);
+    messages.splice(to, 0, moved);
+    let nextSelected = selected;
+    if (selected === from) nextSelected = to;
+    else if (from < selected && selected <= to) nextSelected -= 1;
+    else if (to <= selected && selected < from) nextSelected += 1;
+    setSelected(nextSelected);
+    setRawEditing(false);
+    onChange({ ...request, messages });
+  };
+
+  const startRowDrag = (event: ReactPointerEvent<HTMLButtonElement>, index: number) => {
+    if (event.button !== 0 || request.messages.length < 2) return;
+    const { clientX: startX, clientY: startY } = event;
+    dragState.current = { from: index, to: index, startX, startY, active: false };
+    const move = (moveEvent: PointerEvent) => {
+      const state = dragState.current;
+      if (!state) return;
+      if (!state.active) {
+        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 6) return;
+        state.active = true;
+        setDragFrom(state.from);
+        setDropIndex(state.from);
+        document.body.style.userSelect = "none";
+      }
+      moveEvent.preventDefault();
+      const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>(".message-list-item") ?? []);
+      let target = rows.length - 1;
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        if (moveEvent.clientY < rows[rowIndex].getBoundingClientRect().bottom) { target = rowIndex; break; }
+      }
+      state.to = target;
+      setDropIndex((value) => (value === target ? value : target));
+    };
+    const stop = () => {
+      const state = dragState.current;
+      dragState.current = null;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.style.removeProperty("user-select");
+      setDragFrom(null);
+      setDropIndex(null);
+      if (!state?.active) return;
+      suppressClick.current = true;
+      window.setTimeout(() => { suppressClick.current = false; }, 0);
+      moveMessage(state.from, state.to);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   };
 
   const copy = async (value: string) => {
@@ -91,12 +153,18 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
     <div className="request-columns">
       <section className="message-list-panel">
         <div className="panel-caption"><span>MESSAGES <b>{request.messages.length}</b></span><button className="icon-button" aria-label="Add message" title="Add message" onClick={() => { onChange({ ...request, messages: [...request.messages, { role: "user", content: "" }] }); setSelected(request.messages.length); }}><Plus size={16} /></button></div>
-        <div className="message-list">
+        <div className="message-list" ref={listRef}>
           {request.messages.map((item, index) => {
             const calls = Array.isArray(item.tool_calls) ? item.tool_calls : [];
             const images = messageImageCount(item);
             const hasMeta = calls.length > 0 || images > 0;
-            return <button key={index} className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""}`} onClick={() => { setSelected(index); setRawEditing(false); }}>
+            return <button
+              key={index}
+              className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""} ${dragFrom === index ? "dragging" : ""} ${dragFrom !== null && dropIndex === index && dragFrom !== index ? "drag-over" : ""}`}
+              title="Drag to reorder"
+              onPointerDown={(event) => startRowDrag(event, index)}
+              onClick={() => { if (suppressClick.current) return; setSelected(index); setRawEditing(false); }}
+            >
               <span className={`role-badge role-${item.role}`}>{item.role}</span>
               <span className="message-item-body">
                 <span className="message-item-topline">
@@ -124,6 +192,8 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
             <span className="toolbar-divider" />
             <button className="icon-button" disabled={selected === 0} aria-label="Previous message" onClick={() => { setSelected(selected - 1); setRawEditing(false); }}><ChevronUp size={16} /></button>
             <button className="icon-button" disabled={selected === request.messages.length - 1} aria-label="Next message" onClick={() => { setSelected(selected + 1); setRawEditing(false); }}><ChevronDown size={16} /></button>
+            <span className="toolbar-divider" />
+            <button className="icon-button delete-message" title="Delete message" aria-label="Delete message" onClick={() => { if (window.confirm("Delete this message?")) onChange({ ...request, messages: request.messages.filter((_, index) => index !== selected) }); }}><Trash2 size={15} /></button>
           </div>
         </div>
 
@@ -141,7 +211,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
               } catch (reason) { setRawError(reason instanceof Error ? reason.message : String(reason)); }
             }} />{rawError && <p className="field-error">{rawError}</p>}</> : <JsonTree value={message} label="message" />}
           </div> : <div className="rendered-message">
-            <div className="field-row"><label>ROLE<select value={message.role} onChange={(event) => updateCurrent((current) => ({ ...current, role: event.target.value }))}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>{message.tool_call_id !== undefined && <label>TOOL CALL ID<input value={typeof message.tool_call_id === "string" ? message.tool_call_id : ""} onChange={(event) => updateCurrent((current) => ({ ...current, tool_call_id: event.target.value }))} /></label>}<button className="icon-button delete-message" title="Delete message" aria-label="Delete message" onClick={() => { if (window.confirm("Delete this message?")) onChange({ ...request, messages: request.messages.filter((_, index) => index !== selected) }); }}><Trash2 size={15} /></button></div>
+            <div className="field-row"><label>ROLE<select value={message.role} onChange={(event) => updateCurrent((current) => ({ ...current, role: event.target.value }))}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>{message.tool_call_id !== undefined && <label>TOOL CALL ID<input value={typeof message.tool_call_id === "string" ? message.tool_call_id : ""} onChange={(event) => updateCurrent((current) => ({ ...current, tool_call_id: event.target.value }))} /></label>}</div>
 
             {typeof message.content === "string" ? <label className="content-field">CONTENT<textarea value={message.content} onChange={(event) => updateCurrent((current) => ({ ...current, content: event.target.value }))} placeholder="Message content" /></label> : Array.isArray(message.content) ? <div className="content-parts"><div className="section-label">CONTENT PARTS <span>{message.content.length}</span></div>{message.content.map((part, partIndex) => {
               if (!isRecord(part)) return <JsonTree key={partIndex} value={part} label={`part ${partIndex}`} />;
