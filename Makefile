@@ -1,4 +1,6 @@
-.PHONY: install dev build test test-watch test-ui rust-check rust-test tauri-dev tauri-build dmg clean
+.PHONY: install dev build test test-watch test-ui rust-check rust-test tauri-dev tauri-build macos cross-windows windows linux clean
+
+WINDOWS_TARGET ?= x86_64-pc-windows-msvc
 
 install:
 	npm install
@@ -30,10 +32,30 @@ tauri-dev:
 tauri-build:
 	npm run tauri build
 
-dmg:
+macos:
 	npm run tauri build -- --bundles dmg
 	mkdir -p dist
 	mv src-tauri/target/release/bundle/dmg/*.dmg dist/
+
+# cross-windows 可在 Linux/macOS 上交叉编译，需先准备：
+#   rustup target add x86_64-pc-windows-msvc
+#   cargo install --locked cargo-xwin
+#   Linux: sudo apt install lld llvm
+#   macOS: brew install llvm，并将 $(brew --prefix llvm)/bin 加入 PATH
+cross-windows:
+	npm run tauri build -- --runner cargo-xwin --target $(WINDOWS_TARGET)
+	mkdir -p dist
+	cp src-tauri/target/$(WINDOWS_TARGET)/release/prompt-debugger.exe dist/
+
+windows:
+	npm run tauri build
+	mkdir -p dist
+	cp src-tauri/target/release/prompt-debugger.exe dist/
+
+linux:
+	npm run tauri build
+	mkdir -p dist
+	cp src-tauri/target/release/prompt-debugger dist/
 
 clean:
 	rm -rf dist src-tauri/target

@@ -43,13 +43,18 @@ make dev       # http://localhost:1420
 | `make rust-test` | `cargo test --manifest-path src-tauri/Cargo.toml` | 运行 Rust 测试 |
 | `make tauri-dev` | `npm run tauri dev` | 桌面开发模式 |
 | `make tauri-build` | `npm run tauri build` | 构建 release 应用 |
-| `make dmg` | `npm run tauri build -- --bundles dmg` | 构建 macOS dmg 并输出到 `dist/` |
+| `make macos` | `npm run tauri build -- --bundles dmg` | 构建 macOS dmg 并输出到 `dist/` |
+| `make cross-windows` | `npm run tauri build -- --runner cargo-xwin --target x86_64-pc-windows-msvc` | 在 Linux/macOS 上交叉编译 Windows exe 到 `dist/` |
+| `make windows` | `npm run tauri build` | 在 Windows 本机构建 exe 到 `dist/` |
+| `make linux` | `npm run tauri build` | 构建 Linux 可执行文件到 `dist/` |
 | `make test-ui` | `npm run test:ui` | Playwright UI 冒烟测试 |
 | `make clean` | `rm -rf dist src-tauri/target` | 清理构建产物 |
 
 UI 冒烟测试需要先启动 `make dev`，然后另开终端执行 `make test-ui`。如需指定 Chrome 路径，可设置 `CHROME_PATH` 环境变量；截图默认输出到 `/tmp/prompt-debugger-*.png`。
 
-`make dmg` 构建完成后会把 dmg 移动到 `dist/`，`make clean` 和前端构建都会清空该目录。macOS 首次打包时若提示终端无权控制 Finder，请在“系统设置 → 隐私与安全性 → 自动化”中授权；无图形环境可用 `CI=true make dmg` 跳过 Finder 美化步骤。
+`make macos` 构建完成后会把 dmg 移动到 `dist/`，`make clean` 和前端构建都会清空该目录。macOS 首次打包时若提示终端无权控制 Finder，请在“系统设置 → 隐私与安全性 → 自动化”中授权；无图形环境可用 `CI=true make macos` 跳过 Finder 美化步骤。
+
+`make cross-windows` 在 Linux 和 macOS 上均可交叉编译：需先执行 `rustup target add x86_64-pc-windows-msvc`、安装 `cargo-xwin`；Linux 安装 `lld llvm`，macOS 执行 `brew install llvm` 并把其 `bin` 目录加入 `$PATH`。在 Windows 机器上直接执行 `make windows` 即可。
 
 ## 项目结构
 
