@@ -178,6 +178,20 @@ pub fn read_workspace_file(path: String, state: State<WorkspaceState>) -> Result
 }
 
 #[tauri::command]
+pub fn write_request_file(path: String, content: String, state: State<WorkspaceState>) -> Result<(), String> {
+    let root = current_root(&state)?;
+    let file = existing_path(&root, &path)?;
+    if !file.is_file() || file.extension().and_then(|value| value.to_str()) != Some("json") {
+        return Err("Requests can only be saved to JSON files.".into());
+    }
+    let value: serde_json::Value = serde_json::from_str(&content).map_err(|error| error.to_string())?;
+    if !value.is_object() {
+        return Err("A request must be a JSON object.".into());
+    }
+    fs::write(file, content).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn create_workspace_entry(
     parent: String,
     name: String,

@@ -88,6 +88,7 @@ fn main() {
             workspace::list_workspace,
             workspace::close_workspace,
             workspace::read_workspace_file,
+            workspace::write_request_file,
             workspace::create_workspace_entry,
             workspace::rename_workspace_entry,
             workspace::delete_workspace_entry,
