@@ -7,9 +7,9 @@ mod workspace;
 mod api;
 
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    let app_menu = SubmenuBuilder::new(app, "Prompt Editor")
+    let app_menu = SubmenuBuilder::new(app, "Prompt Debugger")
         .about(Some(AboutMetadata {
-            name: Some("Prompt Editor".into()),
+            name: Some("Prompt Debugger".into()),
             version: Some("0.1.0".into()),
             comments: Some("A focused workbench for debugging model prompts.".into()),
             ..Default::default()
@@ -72,7 +72,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         .separator()
         .close_window()
         .build()?;
-    let help = MenuItemBuilder::with_id("help", "Prompt Editor Help").build(app)?;
+    let help = MenuItemBuilder::with_id("help", "Prompt Debugger Help").build(app)?;
     let help_menu = SubmenuBuilder::new(app, "Help").item(&help).build()?;
 
     MenuBuilder::new(app)
@@ -106,5 +106,5 @@ fn main() {
             let _ = app.emit("native-menu", event.id().as_ref());
         })
         .run(tauri::generate_context!())
-        .expect("error while running Prompt Editor");
+        .expect("error while running Prompt Debugger");
 }

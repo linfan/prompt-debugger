@@ -2415,7 +2415,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "prompt-editor"
+name = "prompt-debugger"
 version = "0.1.0"
 dependencies = [
  "futures-util",

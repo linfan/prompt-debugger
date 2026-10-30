@@ -267,7 +267,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="brand"><span className="brand-mark"><Braces size={19} /></span><span>Prompt Editor</span><span className="version">BETA</span></div>
+        <div className="brand"><span className="brand-mark"><Braces size={19} /></span><span>Prompt Debugger</span><span className="version">BETA</span></div>
         <div className="header-actions">
           <button className="button button-secondary" type="button" onClick={() => void openDirectory()}><FolderOpen size={16} /> Open directory</button>
           <button className="button button-secondary" type="button" disabled={sending} onClick={() => { if (tab === "request" && !confirmDiscard()) return; setPasteText(""); setError(""); setPasteTarget(tab); }}><Clipboard size={15} /> Paste</button>

@@ -12,7 +12,7 @@ page.on("pageerror", (error) => errors.push(error.message));
 try {
   await page.goto("http://localhost:1420", { waitUntil: "networkidle" });
   await page.getByText("Shape a better prompt").waitFor();
-  await page.screenshot({ path: "/tmp/prompt-editor-home.png", fullPage: true });
+  await page.screenshot({ path: "/tmp/prompt-debugger-home.png", fullPage: true });
 
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
@@ -38,7 +38,7 @@ try {
   await page.getByRole("button", { name: "Collapse message" }).click();
   await page.getByRole("button", { name: "Expand message" }).waitFor();
   await page.getByRole("button", { name: "Rendered", exact: true }).click();
-  await page.screenshot({ path: "/tmp/prompt-editor-request.png", fullPage: true });
+  await page.screenshot({ path: "/tmp/prompt-debugger-request.png", fullPage: true });
 
   await page.getByRole("button", { name: "Response", exact: true }).click();
   await page.getByRole("button", { name: "Import response" }).click();
@@ -52,7 +52,7 @@ try {
   await page.getByText("Check the request first.").waitFor();
   await page.getByText("Streamed content").waitFor();
   await page.getByText("Grep").waitFor();
-  await page.screenshot({ path: "/tmp/prompt-editor-response.png", fullPage: true });
+  await page.screenshot({ path: "/tmp/prompt-debugger-response.png", fullPage: true });
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByLabel("API URL").fill("http://localhost:18080/v1/chat/completions");
@@ -62,7 +62,7 @@ try {
 
   assert.deepEqual(errors, []);
   console.log("UI smoke passed: sidebar, request editing, image count, JSON tree, SSE response, settings.");
-  console.log("Screenshots: /tmp/prompt-editor-home.png /tmp/prompt-editor-request.png /tmp/prompt-editor-response.png");
+  console.log("Screenshots: /tmp/prompt-debugger-home.png /tmp/prompt-debugger-request.png /tmp/prompt-debugger-response.png");
 } finally {
   await browser.close();
 }

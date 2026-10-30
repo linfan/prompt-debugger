@@ -15,8 +15,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   sidebarWidth: 254,
 };
 
-const CONFIG_KEY = "prompt-editor.config";
-const LEGACY_API_URL_KEY = "prompt-editor.api-url";
+const CONFIG_KEY = "prompt-debugger.config";
+const LEGACY_API_URL_KEY = "prompt-debugger.api-url";
 
 export function clampPreambleScanLines(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_CONFIG.preambleScanLines;

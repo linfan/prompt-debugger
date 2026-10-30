@@ -9,12 +9,12 @@ describe("config", () => {
   });
 
   it("falls back to defaults for invalid stored values", () => {
-    localStorage.setItem("prompt-editor.config", '{"preambleScanLines":"many","sidebarWidth":null}');
+    localStorage.setItem("prompt-debugger.config", '{"preambleScanLines":"many","sidebarWidth":null}');
     expect(loadConfig()).toEqual(DEFAULT_CONFIG);
   });
 
   it("migrates the legacy API URL key", () => {
-    localStorage.setItem("prompt-editor.api-url", "https://legacy.example.com");
+    localStorage.setItem("prompt-debugger.api-url", "https://legacy.example.com");
     expect(loadConfig().apiUrl).toBe("https://legacy.example.com");
   });
 

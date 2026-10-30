@@ -1,5 +1,5 @@
 [package]
-name = "prompt-editor"
+name = "prompt-debugger"
 version = "0.1.0"
 description = "OpenAI prompt debugging workbench"
 edition = "2021"

@@ -1,4 +1,4 @@
-# Prompt Editor
+# Prompt Debugger
 
 OpenAI Chat Completions 提示词调试工作台，基于 Tauri 2 + React 19 + TypeScript 构建。可以导入、编辑请求与响应，也可以直接向兼容接口发送请求并实时查看流式输出。
 
@@ -47,7 +47,7 @@ make dev       # http://localhost:1420
 | `make test-ui` | `npm run test:ui` | Playwright UI 冒烟测试 |
 | `make clean` | `rm -rf dist src-tauri/target` | 清理构建产物 |
 
-UI 冒烟测试需要先启动 `make dev`，然后另开终端执行 `make test-ui`。如需指定 Chrome 路径，可设置 `CHROME_PATH` 环境变量；截图默认输出到 `/tmp/prompt-editor-*.png`。
+UI 冒烟测试需要先启动 `make dev`，然后另开终端执行 `make test-ui`。如需指定 Chrome 路径，可设置 `CHROME_PATH` 环境变量；截图默认输出到 `/tmp/prompt-debugger-*.png`。
 
 `make dmg` 构建完成后会把 dmg 移动到 `dist/`，`make clean` 和前端构建都会清空该目录。macOS 首次打包时若提示终端无权控制 Finder，请在“系统设置 → 隐私与安全性 → 自动化”中授权；无图形环境可用 `CI=true make dmg` 跳过 Finder 美化步骤。
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Prompt Editor",
+  "productName": "Prompt Debugger",
   "version": "0.1.0",
-  "identifier": "dev.prompteditor.desktop",
+  "identifier": "dev.promptdebugger.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Prompt Editor",
+        "title": "Prompt Debugger",
         "width": 1440,
         "height": 960,
         "minWidth": 960,
