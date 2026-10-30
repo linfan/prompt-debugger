@@ -4,7 +4,8 @@ OpenAI Chat Completions 提示词调试工作台，基于 Tauri 2 + React 19 + T
 
 ## 功能
 
-- **工作区**：原生目录选择，仅浏览 `.json` / `.sse` 文件；文件与文件夹 CRUD 在 Rust 安全边界内完成，拒绝绝对路径、`..` 和符号链接逃逸。
+- **工作区**：原生目录选择，仅浏览 `.json` / `.sse` 文件；右键菜单支持新建、重命名、删除与复制路径，侧栏宽度可拖拽调整，文件名过长时悬浮显示完整名称；文件与文件夹 CRUD 在 Rust 安全边界内完成，拒绝绝对路径、`..` 和符号链接逃逸。
+- **兼容记录文件**：自动跳过文件开头的 HTTP 请求/响应头，从正文开始解析 JSON 或 SSE；扫描行数可在设置中调整（默认 50 行）并持久化。
 - **请求编辑**：粘贴或打开 Chat Completions 请求，结构化编辑消息（多模态 parts、`tool_calls`），Raw JSON 树与源码视图同步，完整保留未知字段。
 - **响应查看**：导入普通 JSON 或 SSE 响应，按 choice 聚合 `reasoning_content`、`content` 与工具调用，提供分区卡片和 Raw 视图。
 - **实时调试**：通过 Rust `reqwest` 发送请求，Token 只保存在内存中；流式响应经 Tauri Channel 增量渲染，支持取消。

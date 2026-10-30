@@ -1,6 +1,7 @@
 export interface WorkspaceNode {
   name: string;
   path: string;
+  fullPath: string;
   kind: "file" | "directory";
   children: WorkspaceNode[];
 }

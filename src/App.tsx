@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Braces, ChevronRight, Clipboard, FolderOpen, Inbox, PanelLeftClose, PanelLeftOpen, Send, Settings2, Sparkles, Square, X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { Channel, invoke } from "@tauri-apps/api/core";
@@ -10,7 +10,9 @@ import { ApiSettings } from "./components/settings/ApiSettings";
 import type { WorkspaceFile, WorkspaceSnapshot } from "./lib/workspace";
 import { type ChatRequest, isRecord, parseChatRequest, parseCompletionJson } from "./lib/openai";
 import { CompletionSseParser, parseCompletionSse } from "./lib/sse";
+import { extractJsonBody, extractSseBody } from "./lib/document";
 import { formatRequest } from "./lib/request";
+import { type AppConfig, clampSidebarWidth, loadConfig, saveConfig } from "./lib/config";
 
 type Tab = "request" | "response";
 interface RequestDocument { source: string; savedSource: string; path?: string; name?: string }
@@ -27,12 +29,16 @@ export default function App() {
   const [pasteTarget, setPasteTarget] = useState<Tab | null>(null);
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState("");
-  const [apiUrl, setApiUrl] = useState(() => localStorage.getItem("prompt-editor.api-url") ?? "");
+  const [config, setConfig] = useState<AppConfig>(loadConfig);
+  const [sidebarWidth, setSidebarWidth] = useState(config.sidebarWidth);
+  const [resizingSidebar, setResizingSidebar] = useState(false);
   const [apiToken, setApiToken] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const activeRequestId = useRef<string | null>(null);
   const requestGeneration = useRef(0);
+  const apiUrl = config.apiUrl;
+  const preambleScanLines = config.preambleScanLines;
   const dirty = Boolean(requestDoc && requestDoc.source !== requestDoc.savedSource);
   let sourceError = "";
   if (requestDoc) {
@@ -41,23 +47,26 @@ export default function App() {
 
   const confirmDiscard = useCallback(() => !dirty || window.confirm("Discard unsaved request changes?"), [dirty]);
 
-  const loadRequest = useCallback((source: string, file?: WorkspaceFile) => {
+  const loadRequest = useCallback((raw: string, file?: WorkspaceFile) => {
+    const source = extractJsonBody(raw, preambleScanLines);
     const parsed = parseChatRequest(source);
     setRequest(parsed);
     setRequestDoc({ source, savedSource: source, path: file?.path, name: file?.name });
     setCurrentFile(null);
     setTab("request");
     setError("");
-  }, []);
+  }, [preambleScanLines]);
 
-  const loadResponse = useCallback((source: string, file?: WorkspaceFile) => {
-    const isSse = file?.name.endsWith(".sse") || /^(data|event|id|):/m.test(source);
-    const response = isSse ? parseCompletionSse(source) : parseCompletionJson(source);
+  const loadResponse = useCallback((raw: string, file?: WorkspaceFile) => {
+    const isSse = file?.name.endsWith(".sse") || /^(data|event|id|):/m.test(raw);
+    const response = isSse
+      ? parseCompletionSse(extractSseBody(raw, preambleScanLines))
+      : parseCompletionJson(extractJsonBody(raw, preambleScanLines));
     setResponseDoc({ response, path: file?.path, name: file?.name });
     setCurrentFile(null);
     setTab("response");
     setError("");
-  }, []);
+  }, [preambleScanLines]);
 
   const openDirectory = useCallback(async () => {
     if (!confirmDiscard()) return;
@@ -154,8 +163,8 @@ export default function App() {
   }, [closeWorkspace, openDirectory, saveRequest]);
 
   useEffect(() => {
-    localStorage.setItem("prompt-editor.api-url", apiUrl);
-  }, [apiUrl]);
+    saveConfig(config);
+  }, [config]);
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -181,11 +190,50 @@ export default function App() {
     try {
       const file = await invoke<WorkspaceFile>("read_workspace_file", { path });
       if (path.endsWith(".json")) {
-        const value: unknown = JSON.parse(file.content);
-        if (isRecord(value) && Array.isArray(value.messages)) loadRequest(file.content, file);
-        else loadResponse(file.content, file);
+        const body = extractJsonBody(file.content, preambleScanLines);
+        const value: unknown = JSON.parse(body);
+        if (isRecord(value) && Array.isArray(value.messages)) loadRequest(body, file);
+        else loadResponse(body, file);
       } else loadResponse(file.content, file);
     } catch (reason) { setError(String(reason)); }
+  };
+
+  const copyPath = async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(path);
+    } catch (reason) { setError(String(reason)); }
+  };
+
+  const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    let latest = startWidth;
+    const move = (moveEvent: PointerEvent) => {
+      latest = clampSidebarWidth(startWidth + moveEvent.clientX - startX);
+      setSidebarWidth(latest);
+    };
+    const stop = () => {
+      setResizingSidebar(false);
+      setConfig((current) => ({ ...current, sidebarWidth: latest }));
+      document.body.style.removeProperty("user-select");
+      document.body.style.removeProperty("cursor");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    setResizingSidebar(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
+
+  const resizeSidebarByKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const next = clampSidebarWidth(sidebarWidth + (event.key === "ArrowRight" ? 16 : -16));
+    setSidebarWidth(next);
+    setConfig((current) => ({ ...current, sidebarWidth: next }));
   };
 
   const createEntry = async (parent: string, name: string, kind: "file" | "directory") => {
@@ -223,19 +271,20 @@ export default function App() {
         <div className="header-actions">
           <button className="button button-secondary" type="button" onClick={() => void openDirectory()}><FolderOpen size={16} /> Open directory</button>
           <button className="button button-secondary" type="button" disabled={sending} onClick={() => { if (tab === "request" && !confirmDiscard()) return; setPasteText(""); setError(""); setPasteTarget(tab); }}><Clipboard size={15} /> Paste</button>
-          <button className="icon-button header-settings" type="button" aria-label="API settings" title="API settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
+          <button className="icon-button header-settings" type="button" aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
           <button className={`button ${sending ? "button-danger" : "button-primary"}`} type="button" disabled={!sending && (!request || Boolean(sourceError))} onClick={() => sending ? void cancelRequest() : void sendRequest()}>{sending ? <Square size={13} /> : <Send size={15} />} {sending ? "Cancel" : "Send request"}</button>
         </div>
       </header>
 
       {error && <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError("")}><X size={14} /></button></div>}
       <div className="workspace-layout">
-        <aside className={`sidebar ${sidebarOpen ? "is-open" : "is-collapsed"}`} aria-label="Workspace sidebar">
+        <aside className={`sidebar ${sidebarOpen ? "is-open" : "is-collapsed"} ${resizingSidebar ? "is-resizing" : ""}`} style={sidebarOpen ? { width: sidebarWidth } : undefined} aria-label="Workspace sidebar">
           <div className="sidebar-heading">
             {sidebarOpen && <span>WORKSPACE</span>}
             <button className="icon-button" type="button" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"} title="Toggle sidebar (⌘B)" onClick={() => setSidebarOpen((value) => !value)}>{sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>
           </div>
-          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={(tab === "request" ? requestDoc?.path : responseDoc?.path) ?? currentFile?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
+          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={(tab === "request" ? requestDoc?.path : responseDoc?.path) ?? currentFile?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onCopyPath={copyPath} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
+          {sidebarOpen && <div className="sidebar-resizer" role="separator" aria-label="Resize workspace sidebar" aria-orientation="vertical" tabIndex={0} title="Drag to resize" onPointerDown={startSidebarResize} onKeyDown={resizeSidebarByKeyboard} />}
         </aside>
 
         <main className="main-panel">
@@ -259,7 +308,15 @@ export default function App() {
         </main>
       </div>
 
-      {settingsOpen && <ApiSettings url={apiUrl} token={apiToken} onUrlChange={setApiUrl} onTokenChange={setApiToken} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <ApiSettings
+        url={apiUrl}
+        token={apiToken}
+        preambleScanLines={preambleScanLines}
+        onUrlChange={(url) => setConfig((current) => ({ ...current, apiUrl: url }))}
+        onTokenChange={setApiToken}
+        onPreambleScanLinesChange={(lines) => setConfig((current) => ({ ...current, preambleScanLines: lines }))}
+        onClose={() => setSettingsOpen(false)}
+      />}
       {pasteTarget && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasteTarget(null); }}>
         <form className="dialog paste-dialog" onSubmit={(event) => { event.preventDefault(); try { if (pasteTarget === "request") loadRequest(pasteText); else loadResponse(pasteText); setPasteTarget(null); } catch (reason) { setError(String(reason)); } }}>
           <div className="dialog-title-row"><h2>{pasteTarget === "request" ? "Paste request JSON" : "Import response"}</h2><button type="button" className="icon-button" aria-label="Close paste dialog" onClick={() => setPasteTarget(null)}><X size={16} /></button></div>

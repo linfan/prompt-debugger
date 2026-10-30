@@ -13,6 +13,7 @@ pub struct WorkspaceState(pub Mutex<Option<PathBuf>>);
 pub struct WorkspaceNode {
     name: String,
     path: String,
+    full_path: String,
     kind: String,
     children: Vec<WorkspaceNode>,
 }
@@ -74,6 +75,7 @@ fn scan_directory(root: &Path, directory: &Path) -> Result<Vec<WorkspaceNode>, S
         nodes.push(WorkspaceNode {
             name: name.to_string_lossy().into_owned(),
             path: relative_path(root, &path)?,
+            full_path: path.to_string_lossy().into_owned(),
             kind: kind.into(),
             children,
         });
@@ -281,6 +283,9 @@ mod tests {
         let tree = scan_directory(&root, &root).unwrap();
         assert_eq!(tree.len(), 2);
         assert!(tree.iter().all(|node| node.name != "notes.txt"));
+        let request = tree.iter().find(|node| node.name == "request.json").unwrap();
+        assert!(request.full_path.ends_with("request.json"));
+        assert!(Path::new(&request.full_path).is_absolute());
         assert!(existing_path(&root, "request.json").unwrap().is_file());
         fs::rename(root.join("request.json"), root.join("renamed.sse")).unwrap();
         assert!(existing_path(&root, "renamed.sse").unwrap().is_file());

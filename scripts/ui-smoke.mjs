@@ -54,14 +54,14 @@ try {
   await page.getByText("Grep").waitFor();
   await page.screenshot({ path: "/tmp/prompt-editor-response.png", fullPage: true });
 
-  await page.getByRole("button", { name: "API settings" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
   await page.getByLabel("API URL").fill("http://localhost:18080/v1/chat/completions");
   await page.locator("#api-token").fill("ui-test-token");
   assert.equal(await page.locator("#api-token").getAttribute("type"), "password");
   await page.getByRole("button", { name: "Done" }).click();
 
   assert.deepEqual(errors, []);
-  console.log("UI smoke passed: sidebar, request editing, image count, JSON tree, SSE response, API settings.");
+  console.log("UI smoke passed: sidebar, request editing, image count, JSON tree, SSE response, settings.");
   console.log("Screenshots: /tmp/prompt-editor-home.png /tmp/prompt-editor-request.png /tmp/prompt-editor-response.png");
 } finally {
   await browser.close();
