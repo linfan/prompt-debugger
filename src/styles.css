@@ -69,3 +69,40 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .empty-state h1 { margin: 23px 0 9px; font-size: 21px; font-weight: 610; letter-spacing: -.035em; color: #3c4d62; }
 .empty-state p { max-width: 400px; margin: 0 0 22px; color: #96a0ad; font-size: 12px; line-height: 1.75; }
 .empty-state .button { min-height: 36px; }
+
+.error-banner { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 18px; color: #9c4550; background: #fff1f2; border-bottom: 1px solid #f1d8dc; font-size: 11px; }
+.error-banner button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.workspace-title { display: flex; align-items: center; justify-content: space-between; padding: 0 11px 10px 13px; gap: 5px; }
+.workspace-title > span { min-width: 0; display: flex; align-items: center; gap: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; color: #5c6d80; }
+.workspace-title > div { display: flex; }
+.workspace-title button, .tree-actions button { width: 23px; height: 23px; padding: 0; border: 0; border-radius: 4px; display: grid; place-items: center; color: #8a96a5; background: transparent; cursor: pointer; }
+.workspace-title button:hover, .tree-actions button:hover { color: #397bbb; background: #e9f0f7; }
+.tree-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 7px 12px; }
+.tree-row { min-height: 30px; padding-right: 5px; display: flex; align-items: center; gap: 6px; border-radius: 5px; color: #68788a; cursor: pointer; font-size: 11px; }
+.tree-row:hover { background: #edf1f6; }
+.tree-row.selected { color: #2e73b7; background: #e5eef8; }
+.tree-row > svg { flex: 0 0 auto; color: #8c9bab; }
+.tree-row.selected > svg { color: #4a88c4; }
+.tree-chevron { width: 13px; height: 13px; flex: 0 0 13px; display: grid; place-items: center; }
+.tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-actions { display: none; flex: 0 0 auto; }
+.tree-row:hover .tree-actions, .tree-row:focus-within .tree-actions { display: flex; }
+.tree-empty { padding: 18px 12px; color: #9ba6b3; font-size: 11px; line-height: 1.6; text-align: center; }
+.button-danger { color: white; background: #c45862; }
+.button-danger:hover { background: #ad4852; }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: #1e2b3b42; backdrop-filter: blur(2px); }
+.dialog { width: min(390px, 100%); padding: 22px; border: 1px solid #e1e6ec; border-radius: 12px; background: white; box-shadow: 0 20px 60px #2634472b; }
+.dialog h2 { margin: 0 0 12px; font-size: 16px; font-weight: 620; }
+.dialog p { color: #7b8795; font-size: 12px; line-height: 1.65; }
+.dialog label { display: block; margin-bottom: 6px; color: #788696; font-size: 11px; }
+.dialog input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #dce3eb; border-radius: 6px; color: #34475d; background: white; font-size: 12px; }
+.dialog .dialog-error { color: #b14e58; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 19px; }
+
+.file-preview { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 18px; border: 1px solid var(--border); border-radius: 10px; background: white; overflow: hidden; }
+.file-preview-heading { display: flex; justify-content: space-between; align-items: flex-start; padding: 17px 19px; border-bottom: 1px solid var(--border); }
+.file-preview-heading h1 { margin: 4px 0; font-size: 15px; font-weight: 600; }
+.file-preview-heading p { margin: 0; color: #9aa4b1; font-size: 10px; }
+.eyebrow { color: #6d8ba9; font-size: 8px; font-weight: 700; letter-spacing: .12em; }
+.file-preview pre { flex: 1; min-height: 0; margin: 0; padding: 20px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: #4e6073; background: #fbfcfe; font: 12px/1.75 "SFMono-Regular", Consolas, monospace; }
