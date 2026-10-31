@@ -1,9 +1,13 @@
-.PHONY: install dev build test test-watch test-ui rust-check rust-test tauri-dev tauri-build macos cross-windows windows linux clean
+.PHONY: install set-version dev build test test-watch test-ui rust-check rust-test tauri-dev tauri-build macos cross-windows windows linux clean
 
 WINDOWS_TARGET ?= x86_64-pc-windows-msvc
 
 install:
 	npm install
+
+set-version:
+	@if [ -z "$(VERSION)" ]; then echo 'usage: make set-version VERSION=0.2.0'; exit 1; fi
+	node scripts/set-version.mjs "$(VERSION)"
 
 dev:
 	npm run dev

@@ -35,6 +35,7 @@ make dev       # http://localhost:1420
 | Make 目标 | 等价命令 | 说明 |
 | --- | --- | --- |
 | `make install` | `npm install` | 安装依赖 |
+| `make set-version VERSION=0.2.0` | `node scripts/set-version.mjs 0.2.0` | 同步更新前后端、Cargo、Tauri 配置与关于菜单中的版本号 |
 | `make dev` | `npm run dev` | 启动 Vite 前端 |
 | `make build` | `npm run build` | 类型检查并构建前端 |
 | `make test` | `npm test` | 运行前端单测（Vitest） |
