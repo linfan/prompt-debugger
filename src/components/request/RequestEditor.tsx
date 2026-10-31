@@ -133,6 +133,16 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
     updateCurrent((current) => ({ ...current, tool_calls: current.tool_calls?.map((call, index) => index === callIndex ? updater(call) : call) }));
   };
 
+  const addToolCall = () => {
+    updateCurrent((current) => {
+      const calls = Array.isArray(current.tool_calls) ? current.tool_calls : [];
+      return {
+        ...current,
+        tool_calls: [...calls, { id: `call_${crypto.randomUUID().slice(0, 8)}`, type: "function", function: { name: "", arguments: "{}" } }],
+      };
+    });
+  };
+
   if (!message) {
     return <div className="request-empty"><p>This request has no messages.</p><button className="button button-primary" onClick={() => onChange({ ...request, messages: [{ role: "user", content: "" }] })}><Plus size={15} /> Add message</button></div>;
   }
@@ -219,7 +229,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
               } catch (reason) { setRawError(reason instanceof Error ? reason.message : String(reason)); }
             }} />{rawError && <p className="field-error">{rawError}</p>}</> : <JsonTree value={message} label="message" />}
           </div> : <div className="rendered-message">
-            <div className="field-row"><label>ROLE<select value={message.role} onChange={(event) => updateCurrent((current) => ({ ...current, role: event.target.value }))}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>{message.tool_call_id !== undefined && <label>TOOL CALL ID<input value={typeof message.tool_call_id === "string" ? message.tool_call_id : ""} onChange={(event) => updateCurrent((current) => ({ ...current, tool_call_id: event.target.value }))} /></label>}</div>
+            <div className="field-row"><label>ROLE<select value={message.role} onChange={(event) => updateCurrent((current) => ({ ...current, role: event.target.value }))}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>{message.role === "tool" && <label>TOOL CALL ID<input value={typeof message.tool_call_id === "string" ? message.tool_call_id : ""} placeholder="call_…" onChange={(event) => updateCurrent((current) => ({ ...current, tool_call_id: event.target.value }))} /></label>}</div>
 
             {typeof message.content === "string" ? <label className="content-field">CONTENT<textarea value={message.content} onChange={(event) => updateCurrent((current) => ({ ...current, content: event.target.value }))} placeholder="Message content" /></label> : Array.isArray(message.content) ? <div className="content-parts"><div className="section-label">CONTENT PARTS <span>{message.content.length}</span></div>{message.content.map((part, partIndex) => {
               if (!isRecord(part)) return <JsonTree key={partIndex} value={part} label={`part ${partIndex}`} />;
@@ -236,7 +246,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
               return <label className="content-field compact" key={partIndex}>TEXT PART {partIndex + 1}<textarea value={typeof part.text === "string" ? part.text : ""} onChange={(event) => updatePart(partIndex, (current) => ({ ...current, text: event.target.value }))} /></label>;
             })}</div> : <div className="null-content"><Code2 size={16} /><span>Content is {message.content === null ? "null" : "structured"}.</span><button className="button button-quiet" onClick={() => updateCurrent((current) => ({ ...current, content: "" }))}>Convert to text</button></div>}
 
-            {toolCalls.length > 0 && <div className="function-calls"><div className="section-title"><Wrench size={16} /><h3>Function Calls</h3><span>{toolCalls.length}</span></div>{toolCalls.map((call, callIndex) => <div className="function-call-card" key={callIndex}><div className="call-number">CALL {callIndex + 1}</div><div className="call-fields"><label>FUNCTION<input value={call.function?.name ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, name: event.target.value } }))} /></label><label>ID<input value={call.id ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, id: event.target.value }))} /></label></div><label className="content-field compact">ARGUMENTS<textarea value={call.function?.arguments ?? ""} spellCheck={false} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, arguments: event.target.value } }))} /></label></div>)}</div>}
+            {(message.role === "assistant" || toolCalls.length > 0) && <div className="function-calls"><div className="section-title"><Wrench size={16} /><h3>Function Calls</h3><span>{toolCalls.length}</span>{message.role === "assistant" && <button className="button button-quiet function-add" type="button" onClick={addToolCall}><Plus size={13} />Add function call</button>}</div>{toolCalls.map((call, callIndex) => <div className="function-call-card" key={callIndex}><div className="call-number">CALL {callIndex + 1}</div><div className="call-fields"><label>FUNCTION<input value={call.function?.name ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, name: event.target.value } }))} /></label><label>ID<input value={call.id ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, id: event.target.value }))} /></label></div><label className="content-field compact">ARGUMENTS<textarea value={call.function?.arguments ?? ""} spellCheck={false} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, arguments: event.target.value } }))} /></label></div>)}</div>}
           </div>}
         </div>
       </section>

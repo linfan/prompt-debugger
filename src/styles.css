@@ -193,6 +193,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .image-part img { display: block; max-width: 280px; max-height: 220px; margin-top: 5px; border-radius: 6px; object-fit: contain; background: #eef1f5; }
 .null-content { min-height: 90px; display: flex; align-items: center; gap: 9px; padding: 15px; border: 1px dashed #dce3ea; border-radius: 7px; color: #8d99a6; font-size: 11px; }
 .function-calls { margin-top: 20px; }
+.function-calls .section-title .function-add { margin-left: auto; min-height: 26px; padding: 0 9px; font-size: 9px; }
 .section-title { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: #4a708f; }
 .section-title h3 { margin: 0; font-size: 13px; font-weight: 600; }
 .section-title span { padding: 2px 5px; border-radius: 4px; background: #edf3f8; color: #8295a6; font-size: 8px; }

@@ -41,6 +41,14 @@ try {
   await page.getByRole("button", { name: "Collapse message" }).click();
   await page.getByRole("button", { name: "Expand message" }).waitFor();
   await page.getByRole("button", { name: "Rendered", exact: true }).click();
+  await page.locator(".message-list-item").nth(1).click();
+  await page.locator(".field-row select").selectOption("tool");
+  await page.getByLabel("TOOL CALL ID").waitFor();
+  await page.locator(".field-row select").selectOption("user");
+  await page.getByLabel("TOOL CALL ID").waitFor({ state: "detached" });
+  await page.locator(".message-list-item").nth(2).click();
+  await page.getByRole("button", { name: /Add function call/ }).click();
+  assert.equal(await page.locator(".function-call-card").count(), 2);
   await page.screenshot({ path: "/tmp/prompt-debugger-request.png", fullPage: true });
 
   await page.getByRole("button", { name: "Paste", exact: true }).click();
@@ -79,7 +87,7 @@ try {
   await page.getByRole("button", { name: "Done" }).click();
 
   assert.deepEqual(errors, []);
-  console.log("UI smoke passed: sidebar, document tabs, request editing, image count, JSON tree, SSE response, tab context menu, settings.");
+  console.log("UI smoke passed: sidebar, document tabs, request editing, tool role, function calls, image count, JSON tree, SSE response, tab context menu, settings.");
   console.log("Screenshots: /tmp/prompt-debugger-home.png /tmp/prompt-debugger-request.png /tmp/prompt-debugger-response.png");
 } finally {
   await browser.close();
