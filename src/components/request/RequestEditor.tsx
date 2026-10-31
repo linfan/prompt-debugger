@@ -26,6 +26,7 @@ interface Props {
   sourceError?: string;
   dirty: boolean;
   filePath?: string;
+  name?: string;
   onChange: (request: ChatRequest) => void;
   onSourceChange: (source: string) => void;
   onSave: () => void;
@@ -33,7 +34,7 @@ interface Props {
 
 const roles = ["system", "user", "assistant", "tool"];
 
-export function RequestEditor({ request, source, sourceError, dirty, filePath, onChange, onSourceChange, onSave }: Props) {
+export function RequestEditor({ request, source, sourceError, dirty, filePath, name, onChange, onSourceChange, onSave }: Props) {
   const [selected, setSelected] = useState(0);
   const [mode, setMode] = useState<"rendered" | "raw">("rendered");
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -141,10 +142,13 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
 
   return <div className="request-editor">
     <div className="request-config">
-      <label>MODEL<input value={typeof request.model === "string" ? request.model : ""} onChange={(event) => onChange({ ...request, model: event.target.value })} placeholder="Model name" /></label>
-      <div className="request-config-actions">
-        <button className={`button button-secondary ${sourceOpen ? "is-active" : ""}`} onClick={() => setSourceOpen((value) => !value)}><Braces size={14} /> Request JSON</button>
-        <button className="button button-secondary" disabled={!filePath || !dirty || Boolean(sourceError)} onClick={onSave} title={filePath ? "Save request (⌘S)" : "Open a file to save changes"}><Save size={14} /> Save{dirty && <span className="dirty-dot" />}</button>
+      <div className="document-title"><span className="status-dot" /><span>{name ?? "Chat completion request"}</span></div>
+      <div className="request-config-controls">
+        <label>MODEL<input value={typeof request.model === "string" ? request.model : ""} onChange={(event) => onChange({ ...request, model: event.target.value })} placeholder="Model name" /></label>
+        <div className="request-config-actions">
+          <button className={`button button-secondary ${sourceOpen ? "is-active" : ""}`} onClick={() => setSourceOpen((value) => !value)}><Braces size={14} /> Request JSON</button>
+          <button className="button button-secondary" disabled={!filePath || !dirty || Boolean(sourceError)} onClick={onSave} title={filePath ? "Save request (⌘S)" : "Open a file to save changes"}><Save size={14} /> Save{dirty && <span className="dirty-dot" />}</button>
+        </div>
       </div>
     </div>
     {sourceOpen && <div className="request-source">

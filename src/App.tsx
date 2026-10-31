@@ -290,13 +290,13 @@ export default function App() {
         <main className="main-panel">
           <div className="main-toolbar">
             <nav className="tabs" aria-label="Editor sections">
-              <button className={tab === "request" ? "tab active" : "tab"} onClick={() => setTab("request")} type="button">Request{requestDoc?.name ? ` · ${requestDoc.name}` : ""}{dirty && <span className="tab-dirty" />}</button>
+              <button className={tab === "request" ? "tab active" : "tab"} onClick={() => setTab("request")} type="button">Request{dirty && <span className="tab-dirty" />}</button>
               <button className={tab === "response" ? "tab active" : "tab"} onClick={() => setTab("response")} type="button">Response</button>
             </nav>
             <span className="shortcut-hint">⌘1 / ⌘2</span>
           </div>
 
-          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : tab === "response" && responseDoc ? <ResponseViewer response={responseDoc.response} name={responseDoc.name} streaming={sending && responseDoc.name === "Live response"} /> : currentFile ? <section className="file-preview">
+          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} name={requestDoc.name} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : tab === "response" && responseDoc ? <ResponseViewer response={responseDoc.response} name={responseDoc.name} streaming={sending && responseDoc.name === "Live response"} /> : currentFile ? <section className="file-preview">
             <div className="file-preview-heading"><div><span className="eyebrow">{currentFile.name.endsWith(".sse") ? "SSE STREAM" : "JSON DOCUMENT"}</span><h1>{currentFile.name}</h1><p>{currentFile.path}</p></div><button className="icon-button" title="Close file" aria-label="Close file" onClick={() => setCurrentFile(null)}><X size={17} /></button></div>
             <pre>{currentFile.content || "(empty file)"}</pre>
           </section> : <section className="empty-state">

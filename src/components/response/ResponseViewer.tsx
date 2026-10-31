@@ -25,7 +25,7 @@ export function ResponseViewer({ response, name, streaming = false }: { response
 
   return <div className="response-viewer">
     <div className="response-toolbar">
-      <div className="response-document"><span className={`status-dot ${streaming ? "is-live" : ""}`} /><span>{name ?? (response.source === "sse" ? "Streamed completion" : "Completion response")}</span>{streaming && <span className="live-label">RECEIVING</span>}</div>
+      <div className="document-title"><span className={`status-dot ${streaming ? "is-live" : ""}`} /><span>{name ?? (response.source === "sse" ? "Streamed completion" : "Completion response")}</span>{streaming && <span className="live-label">RECEIVING</span>}</div>
       <div className="detail-toolbar">
         {response.choices.length > 1 && <div className="choice-nav"><button className="icon-button" disabled={choicePosition === 0} aria-label="Previous choice" onClick={() => setChoicePosition((value) => value - 1)}><ChevronUp size={14} /></button><span>Choice {choicePosition + 1} / {response.choices.length}</span><button className="icon-button" disabled={choicePosition >= response.choices.length - 1} aria-label="Next choice" onClick={() => setChoicePosition((value) => value + 1)}><ChevronDown size={14} /></button></div>}
         <div className="segmented"><button className={mode === "rendered" ? "active" : ""} onClick={() => setMode("rendered")}>Rendered</button><button className={mode === "raw" ? "active" : ""} onClick={() => setMode("raw")}>Raw</button></div>
