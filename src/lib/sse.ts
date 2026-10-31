@@ -3,7 +3,24 @@ import {
   type ResponseAggregate,
   contentText,
   isRecord,
+  reasoningText,
 } from "./openai";
+
+function appendFragment(current: string, incoming: string): string {
+  if (!incoming || incoming === current) return current;
+  if (!current) return incoming;
+  return incoming.startsWith(current) ? incoming : current + incoming;
+}
+
+function toolCallIndex(choice: ChoiceAggregate, call: Record<string, unknown>): number {
+  if (typeof call.index === "number") return call.index;
+  if (typeof call.id === "string" && call.id) {
+    const matched = choice.toolCalls.find((item) => item.id === call.id);
+    if (matched) return matched.index;
+    return choice.toolCalls.reduce((max, item) => Math.max(max, item.index + 1), 0);
+  }
+  return choice.toolCalls.at(-1)?.index ?? 0;
+}
 
 export class CompletionSseParser {
   private buffer = "";
@@ -72,26 +89,23 @@ export class CompletionSseParser {
         toolCalls: [],
       };
       this.choices.set(index, choice);
-      const delta = isRecord(entry.delta) ? entry.delta : entry;
+      const delta = isRecord(entry.delta) ? entry.delta : isRecord(entry.message) ? entry.message : entry;
       choice.content += contentText(delta.content);
-      if (typeof delta.reasoning_content === "string") choice.reasoningContent += delta.reasoning_content;
-      if (typeof delta.reasoning === "string") choice.reasoningContent += delta.reasoning;
+      choice.reasoningContent += reasoningText(delta);
       if (typeof entry.finish_reason === "string") choice.finishReason = entry.finish_reason;
       if (!Array.isArray(delta.tool_calls)) continue;
       for (const call of delta.tool_calls) {
-        if (!isRecord(call) || typeof call.index !== "number") {
-          this.warnings.push("Ignored a streaming tool call without an index.");
-          continue;
-        }
-        let target = choice.toolCalls.find((item) => item.index === call.index);
+        if (!isRecord(call)) continue;
+        const index = toolCallIndex(choice, call);
+        let target = choice.toolCalls.find((item) => item.index === index);
         if (!target) {
-          target = { index: call.index, id: "", name: "", arguments: "" };
+          target = { index, id: "", name: "", arguments: "" };
           choice.toolCalls.push(target);
         }
-        if (typeof call.id === "string") target.id += call.id;
+        if (typeof call.id === "string") target.id = appendFragment(target.id, call.id);
         if (isRecord(call.function)) {
-          if (typeof call.function.name === "string") target.name += call.function.name;
-          if (typeof call.function.arguments === "string") target.arguments += call.function.arguments;
+          if (typeof call.function.name === "string") target.name = appendFragment(target.name, call.function.name);
+          if (typeof call.function.arguments === "string") target.arguments = appendFragment(target.arguments, call.function.arguments);
         }
       }
       choice.toolCalls.sort((a, b) => a.index - b.index);

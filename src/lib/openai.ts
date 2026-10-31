@@ -74,6 +74,39 @@ export function contentText(content: unknown): string {
   }).join("");
 }
 
+const reasoningPartType = /^(reasoning|thinking|thought)/i;
+
+function partText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(partText).join("");
+  if (!isRecord(value)) return "";
+  for (const key of ["text", "thinking", "summary", "content"]) {
+    const text = partText(value[key]);
+    if (text) return text;
+  }
+  return "";
+}
+
+/**
+ * Providers expose reasoning as `reasoning_content` (DeepSeek/vLLM),
+ * `reasoning` (vLLM), `thinking` (Mistral), or `reasoning_details`
+ * (OpenRouter). Some also inline reasoning parts in `content`.
+ */
+export function reasoningText(source: Record<string, unknown>): string {
+  for (const key of ["reasoning_content", "reasoning"]) {
+    const text = partText(source[key]);
+    if (text) return text;
+  }
+  const details = partText(source.reasoning_details);
+  if (details) return details;
+  const thinking = partText(source.thinking);
+  if (thinking) return thinking;
+  if (!Array.isArray(source.content)) return "";
+  return source.content.map((part) =>
+    isRecord(part) && typeof part.type === "string" && reasoningPartType.test(part.type) ? partText(part) : ""
+  ).join("");
+}
+
 export function messageImageCount(message: ChatMessage): number {
   if (!Array.isArray(message.content)) return 0;
   return message.content.filter((part) => isRecord(part) && (
@@ -87,8 +120,7 @@ function emptyChoice(index: number): ChoiceAggregate {
 
 function applyMessage(choice: ChoiceAggregate, message: Record<string, unknown>) {
   choice.content += contentText(message.content);
-  if (typeof message.reasoning_content === "string") choice.reasoningContent += message.reasoning_content;
-  if (typeof message.reasoning === "string") choice.reasoningContent += message.reasoning;
+  choice.reasoningContent += reasoningText(message);
   if (Array.isArray(message.tool_calls)) {
     for (const call of message.tool_calls) applyToolCall(choice, call, choice.toolCalls.length, false);
   }
@@ -109,6 +141,8 @@ function applyToolCall(choice: ChoiceAggregate, value: unknown, fallbackIndex: n
     }
     if (typeof value.function.arguments === "string") {
       target.arguments = streaming ? target.arguments + value.function.arguments : value.function.arguments;
+    } else if (value.function.arguments !== undefined && value.function.arguments !== null) {
+      target.arguments = JSON.stringify(value.function.arguments);
     }
   }
   choice.toolCalls.sort((a, b) => a.index - b.index);
