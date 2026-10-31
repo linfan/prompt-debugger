@@ -52,10 +52,17 @@ fn decode_utf8(pending: &mut Vec<u8>, chunk: &[u8], end: bool) -> String {
 async fn perform_request(
     url: String,
     token: String,
-    payload: Value,
+    mut payload: Value,
+    stream_requested: bool,
     on_chunk: &(dyn Fn(String) -> Result<(), String> + Send + Sync),
     cancelled: CancellationToken,
 ) -> Result<ApiCompletion, String> {
+    let object = payload.as_object_mut()
+        .ok_or_else(|| "Request payload must be a JSON object.".to_string())?;
+    object.insert("stream".into(), Value::Bool(stream_requested));
+    if !stream_requested {
+        object.remove("stream_options");
+    }
     let client = reqwest::Client::new();
     let builder = client.post(&url).json(&payload);
     let builder = if token.is_empty() { builder } else { builder.bearer_auth(&token) };
@@ -67,8 +74,7 @@ async fn perform_request(
     let content_type = response.headers().get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok()).unwrap_or("").to_ascii_lowercase();
     let streaming = content_type.contains("text/event-stream")
-        || (payload.get("stream").and_then(Value::as_bool) == Some(true)
-            && !content_type.contains("application/json"));
+        || (stream_requested && !content_type.contains("application/json"));
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         return Err(redact(format!("HTTP {status}: {body}"), &token));
@@ -113,6 +119,7 @@ pub async fn send_chat_completion(
     url: String,
     token: String,
     payload: Value,
+    stream: bool,
     channel: Channel<String>,
     state: State<'_, ApiState>,
 ) -> Result<ApiCompletion, String> {
@@ -120,7 +127,7 @@ pub async fn send_chat_completion(
     state.0.lock().map_err(|_| "API state lock failed.".to_string())?
         .insert(request_id.clone(), cancelled.clone());
     let on_chunk = |text| channel.send(text).map_err(|_| "Response window was closed.".to_string());
-    let result = perform_request(url, token, payload, &on_chunk, cancelled).await;
+    let result = perform_request(url, token, payload, stream, &on_chunk, cancelled).await;
     state.0.lock().map_err(|_| "API state lock failed.".to_string())?.remove(&request_id);
     result
 }
@@ -186,11 +193,51 @@ mod tests {
             format!("http://{address}/v1/chat/completions"),
             "test-token".into(),
             json!({"stream": true}),
+            true,
             &on_chunk,
             CancellationToken::new(),
         ).await.unwrap();
         server.await.unwrap();
         assert_eq!(result.format, "sse");
         assert!(received.into_inner().unwrap().contains("你好"));
+    }
+
+    #[tokio::test]
+    async fn sends_non_streaming_flag_and_returns_json() {
+        use super::perform_request;
+        use serde_json::json;
+        use std::sync::Mutex;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        use tokio_util::sync::CancellationToken;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0; 8192];
+            let length = socket.read(&mut buffer).await.unwrap();
+            let request = String::from_utf8_lossy(&buffer[..length]);
+            assert!(request.contains("\"stream\":false"));
+            let body = "{\"choices\":[]}";
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        let received = Mutex::new(String::new());
+        let on_chunk = |chunk: String| {
+            received.lock().unwrap().push_str(&chunk);
+            Ok(())
+        };
+        let result = perform_request(
+            format!("http://{address}/v1/chat/completions"),
+            "".into(),
+            json!({"stream": true, "stream_options": {"include_usage": true}}),
+            false,
+            &on_chunk,
+            CancellationToken::new(),
+        ).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(result.format, "json");
+        assert!(received.into_inner().unwrap().contains("choices"));
     }
 }

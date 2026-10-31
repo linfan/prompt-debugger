@@ -2,6 +2,7 @@ export interface AppConfig {
   apiUrl: string;
   preambleScanLines: number;
   sidebarWidth: number;
+  stream: boolean;
 }
 
 export const PREAMBLE_MIN_LINES = 1;
@@ -13,6 +14,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   apiUrl: "",
   preambleScanLines: 50,
   sidebarWidth: 254,
+  stream: true,
 };
 
 const CONFIG_KEY = "prompt-debugger.config";
@@ -47,6 +49,7 @@ export function loadConfig(storage: Storage = localStorage): AppConfig {
       sidebarWidth: typeof record.sidebarWidth === "number"
         ? clampSidebarWidth(record.sidebarWidth)
         : fallback.sidebarWidth,
+      stream: typeof record.stream === "boolean" ? record.stream : fallback.stream,
     };
   } catch {
     return fallback;

@@ -30,8 +30,17 @@ pub struct WorkspaceSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceFile {
     pub path: String,
+    pub full_path: String,
     pub name: String,
     pub content: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedFile {
+    pub path: Option<String>,
+    pub full_path: String,
+    pub name: String,
 }
 
 fn supported_file(path: &Path) -> bool {
@@ -174,6 +183,7 @@ pub fn read_workspace_file(path: String, state: State<WorkspaceState>) -> Result
     }
     Ok(WorkspaceFile {
         path,
+        full_path: file.to_string_lossy().into_owned(),
         name: file.file_name().unwrap_or_default().to_string_lossy().into_owned(),
         content: fs::read_to_string(file).map_err(|error| error.to_string())?,
     })
@@ -191,6 +201,51 @@ pub fn write_request_file(path: String, content: String, state: State<WorkspaceS
         return Err("A request must be a JSON object.".into());
     }
     fs::write(file, content).map_err(|error| error.to_string())
+}
+
+fn write_response_file(root: Option<&Path>, raw_path: &str, content: &str) -> Result<SavedFile, String> {
+    let target = Path::new(raw_path);
+    if !target.is_absolute() {
+        return Err("An absolute save path is required.".into());
+    }
+    let name = target.file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Enter a valid file name.".to_string())?
+        .to_string();
+    match target.extension().and_then(|value| value.to_str()) {
+        Some("json") => {
+            serde_json::from_str::<serde_json::Value>(content)
+                .map_err(|error| format!("Response is not valid JSON: {error}"))?;
+        }
+        Some("sse") => {}
+        _ => return Err("Save responses as .json or .sse files.".into()),
+    }
+    let parent = target.parent()
+        .ok_or_else(|| "Invalid save path.".to_string())?
+        .canonicalize()
+        .map_err(|_| "The save directory does not exist.".to_string())?;
+    if !parent.is_dir() {
+        return Err("The save directory does not exist.".into());
+    }
+    let file = parent.join(&name);
+    if fs::symlink_metadata(&file).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(false) {
+        return Err("Symbolic links are not supported.".into());
+    }
+    fs::write(&file, content).map_err(|error| error.to_string())?;
+    let relative = root
+        .and_then(|root| file.strip_prefix(root).ok())
+        .map(|path| path.to_string_lossy().replace('\\', "/"));
+    Ok(SavedFile {
+        path: relative,
+        full_path: file.to_string_lossy().into_owned(),
+        name,
+    })
+}
+
+#[tauri::command]
+pub fn save_response_file(path: String, content: String, state: State<WorkspaceState>) -> Result<SavedFile, String> {
+    let root = state.0.lock().map_err(|_| "Workspace lock failed.".to_string())?.clone();
+    write_response_file(root.as_deref(), &path, &content)
 }
 
 #[tauri::command]
@@ -300,5 +355,22 @@ mod tests {
         let root = temp.path().canonicalize().unwrap();
         std::os::unix::fs::symlink("/etc/passwd", root.join("link.json")).unwrap();
         assert!(existing_path(&root, "link.json").is_err());
+    }
+
+    #[test]
+    fn saves_responses_and_validates_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let saved = write_response_file(Some(&root), root.join("response.json").to_str().unwrap(), "{\"choices\":[]}").unwrap();
+        assert_eq!(saved.path.as_deref(), Some("response.json"));
+        assert!(saved.full_path.ends_with("response.json"));
+        assert!(root.join("response.json").is_file());
+        assert!(write_response_file(Some(&root), root.join("bad.json").to_str().unwrap(), "not json").is_err());
+        assert!(write_response_file(Some(&root), root.join("bad.txt").to_str().unwrap(), "{}").is_err());
+        let outside = tempfile::tempdir().unwrap();
+        let outside_root = outside.path().canonicalize().unwrap();
+        let saved = write_response_file(Some(&root), outside_root.join("response.sse").to_str().unwrap(), "data: {}\n\n").unwrap();
+        assert!(saved.path.is_none());
+        assert!(outside_root.join("response.sse").is_file());
     }
 }

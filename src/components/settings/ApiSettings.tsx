@@ -1,18 +1,20 @@
 import { useState } from "react";
-import { Eye, EyeOff, FileCode2, KeyRound, Settings2, X } from "lucide-react";
+import { Eye, EyeOff, FileCode2, KeyRound, Settings2, Waves, X } from "lucide-react";
 import { PREAMBLE_MAX_LINES, PREAMBLE_MIN_LINES, clampPreambleScanLines } from "../../lib/config";
 
 interface Props {
   url: string;
   token: string;
   preambleScanLines: number;
+  stream: boolean;
   onUrlChange: (url: string) => void;
   onTokenChange: (token: string) => void;
   onPreambleScanLinesChange: (lines: number) => void;
+  onStreamChange: (stream: boolean) => void;
   onClose: () => void;
 }
 
-export function ApiSettings({ url, token, preambleScanLines, onUrlChange, onTokenChange, onPreambleScanLinesChange, onClose }: Props) {
+export function ApiSettings({ url, token, preambleScanLines, stream, onUrlChange, onTokenChange, onPreambleScanLinesChange, onStreamChange, onClose }: Props) {
   const [showToken, setShowToken] = useState(false);
   const [linesDraft, setLinesDraft] = useState(String(preambleScanLines));
 
@@ -32,6 +34,12 @@ export function ApiSettings({ url, token, preambleScanLines, onUrlChange, onToke
       <label htmlFor="api-token">API TOKEN</label>
       <div className="token-input"><KeyRound size={14} /><input id="api-token" type={showToken ? "text" : "password"} value={token} onChange={(event) => onTokenChange(event.target.value)} placeholder="Optional for local endpoints" autoComplete="off" spellCheck={false} /><button type="button" aria-label={showToken ? "Hide API token" : "Show API token"} onClick={() => setShowToken((value) => !value)}>{showToken ? <EyeOff size={14} /> : <Eye size={14} />}</button></div>
       <div className="security-note">The URL and file parsing settings are remembered on this device. The token is kept only in memory and is cleared when you quit.</div>
+      <h3 className="settings-section"><span className="settings-section-icon"><Waves size={14} /></span>Request delivery</h3>
+      <p>Streaming renders tokens as they arrive. Complete waits for the full response before rendering it.</p>
+      <div className="segmented settings-segmented" role="group" aria-label="Request delivery mode">
+        <button type="button" className={stream ? "active" : ""} aria-pressed={stream} onClick={() => onStreamChange(true)}>Streaming</button>
+        <button type="button" className={!stream ? "active" : ""} aria-pressed={!stream} onClick={() => onStreamChange(false)}>Complete</button>
+      </div>
       <h3 className="settings-section"><span className="settings-section-icon"><FileCode2 size={14} /></span>File parsing</h3>
       <p>When a recorded JSON or SSE file starts with an HTTP header block, the editor skips leading lines to find the body. Only the first N lines are scanned.</p>
       <label htmlFor="preamble-lines">HEADER SCAN LINES (N)</label>

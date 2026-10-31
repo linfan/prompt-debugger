@@ -4,8 +4,8 @@ describe("config", () => {
   beforeEach(() => localStorage.clear());
 
   it("round-trips settings", () => {
-    saveConfig({ apiUrl: "https://example.com/v1", preambleScanLines: 12, sidebarWidth: 320 });
-    expect(loadConfig()).toEqual({ apiUrl: "https://example.com/v1", preambleScanLines: 12, sidebarWidth: 320 });
+    saveConfig({ apiUrl: "https://example.com/v1", preambleScanLines: 12, sidebarWidth: 320, stream: false });
+    expect(loadConfig()).toEqual({ apiUrl: "https://example.com/v1", preambleScanLines: 12, sidebarWidth: 320, stream: false });
   });
 
   it("falls back to defaults for invalid stored values", () => {

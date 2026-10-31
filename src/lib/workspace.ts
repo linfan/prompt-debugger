@@ -14,6 +14,7 @@ export interface WorkspaceSnapshot {
 
 export interface WorkspaceFile {
   path: string;
+  fullPath: string;
   name: string;
   content: string;
 }

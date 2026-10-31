@@ -53,17 +53,17 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
     let sidebar = MenuItemBuilder::with_id("toggle-sidebar", "Toggle Sidebar")
         .accelerator("CmdOrCtrl+B")
         .build(app)?;
-    let request = MenuItemBuilder::with_id("show-request", "Request")
-        .accelerator("CmdOrCtrl+1")
+    let next_tab = MenuItemBuilder::with_id("next-tab", "Next Tab")
+        .accelerator("Ctrl+Tab")
         .build(app)?;
-    let response = MenuItemBuilder::with_id("show-response", "Response")
-        .accelerator("CmdOrCtrl+2")
+    let previous_tab = MenuItemBuilder::with_id("previous-tab", "Previous Tab")
+        .accelerator("Ctrl+Shift+Tab")
         .build(app)?;
     let view_menu = SubmenuBuilder::new(app, "View")
         .item(&sidebar)
         .separator()
-        .item(&request)
-        .item(&response)
+        .item(&next_tab)
+        .item(&previous_tab)
         .build()?;
 
     let window_menu = SubmenuBuilder::new(app, "Window")
@@ -91,6 +91,7 @@ fn main() {
             workspace::close_workspace,
             workspace::read_workspace_file,
             workspace::write_request_file,
+            workspace::save_response_file,
             workspace::create_workspace_entry,
             workspace::rename_workspace_entry,
             workspace::delete_workspace_entry,

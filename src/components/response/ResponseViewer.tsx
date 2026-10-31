@@ -1,15 +1,13 @@
-import { useEffect, useState } from "react";
-import { Brain, Check, ChevronDown, ChevronUp, Copy, MessageSquareText, Wrench } from "lucide-react";
+import { useState } from "react";
+import { Brain, Check, ChevronDown, ChevronUp, Copy, MessageSquareText, Save, Wrench } from "lucide-react";
 import type { ResponseAggregate } from "../../lib/openai";
 import { JsonTree } from "../JsonTree";
 
-export function ResponseViewer({ response, name, streaming = false }: { response: ResponseAggregate; name?: string; streaming?: boolean }) {
+export function ResponseViewer({ response, name, streaming = false, onSave }: { response: ResponseAggregate; name?: string; streaming?: boolean; onSave?: () => void }) {
   const [choicePosition, setChoicePosition] = useState(0);
   const [mode, setMode] = useState<"rendered" | "raw">("rendered");
   const [copied, setCopied] = useState("");
   const choice = response.choices[Math.min(choicePosition, Math.max(0, response.choices.length - 1))];
-
-  useEffect(() => { setChoicePosition(0); }, [response.raw]);
 
   const copy = async (key: string, value: string) => {
     await navigator.clipboard.writeText(value);
@@ -27,6 +25,7 @@ export function ResponseViewer({ response, name, streaming = false }: { response
     <div className="response-toolbar">
       <div className="document-title"><span className={`status-dot ${streaming ? "is-live" : ""}`} /><span>{name ?? (response.source === "sse" ? "Streamed completion" : "Completion response")}</span>{streaming && <span className="live-label">RECEIVING</span>}</div>
       <div className="detail-toolbar">
+        {onSave && <button className="button button-secondary response-save" type="button" title="Save response as file" onClick={onSave}><Save size={13} /> Save</button>}
         {response.choices.length > 1 && <div className="choice-nav"><button className="icon-button" disabled={choicePosition === 0} aria-label="Previous choice" onClick={() => setChoicePosition((value) => value - 1)}><ChevronUp size={14} /></button><span>Choice {choicePosition + 1} / {response.choices.length}</span><button className="icon-button" disabled={choicePosition >= response.choices.length - 1} aria-label="Next choice" onClick={() => setChoicePosition((value) => value + 1)}><ChevronDown size={14} /></button></div>}
         <div className="segmented"><button className={mode === "rendered" ? "active" : ""} onClick={() => setMode("rendered")}>Rendered</button><button className={mode === "raw" ? "active" : ""} onClick={() => setMode("raw")}>Raw</button></div>
         {copyButton("response", response.raw)}

@@ -1,32 +1,30 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Braces, ChevronRight, Clipboard, FolderOpen, Inbox, PanelLeftClose, PanelLeftOpen, Send, Settings2, Sparkles, Square, X } from "lucide-react";
+import { Braces, ChevronRight, Clipboard, FolderOpen, PanelLeftClose, PanelLeftOpen, Send, Settings2, Sparkles, Square, X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { WorkspaceSidebar } from "./components/workspace/WorkspaceSidebar";
 import { RequestEditor } from "./components/request/RequestEditor";
 import { ResponseViewer } from "./components/response/ResponseViewer";
 import { ApiSettings } from "./components/settings/ApiSettings";
-import type { WorkspaceFile, WorkspaceSnapshot } from "./lib/workspace";
-import { type ChatRequest, isRecord, parseChatRequest, parseCompletionJson } from "./lib/openai";
+import { DocumentTabs } from "./components/tabs/DocumentTabs";
+import type { WorkspaceFile, WorkspaceNode, WorkspaceSnapshot } from "./lib/workspace";
+import type { ChatRequest } from "./lib/openai";
+import { isRecord, parseChatRequest, parseCompletionJson } from "./lib/openai";
 import { CompletionSseParser, parseCompletionSse } from "./lib/sse";
 import { extractJsonBody, extractSseBody } from "./lib/document";
 import { formatRequest } from "./lib/request";
 import { type AppConfig, clampSidebarWidth, loadConfig, saveConfig } from "./lib/config";
+import { isDirty, type DocumentTab } from "./lib/tabs";
 
-type Tab = "request" | "response";
-interface RequestDocument { source: string; savedSource: string; path?: string; name?: string }
-interface ResponseDocument { response: import("./lib/openai").ResponseAggregate; path?: string; name?: string }
+interface SavedFile { path: string | null; fullPath: string; name: string }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("request");
+  const [tabs, setTabs] = useState<DocumentTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
-  const [currentFile, setCurrentFile] = useState<WorkspaceFile | null>(null);
-  const [request, setRequest] = useState<ChatRequest | null>(null);
-  const [requestDoc, setRequestDoc] = useState<RequestDocument | null>(null);
-  const [responseDoc, setResponseDoc] = useState<ResponseDocument | null>(null);
-  const [pasteTarget, setPasteTarget] = useState<Tab | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState("");
   const [config, setConfig] = useState<AppConfig>(loadConfig);
@@ -36,131 +34,204 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const activeRequestId = useRef<string | null>(null);
+  const sendingRef = useRef(false);
   const requestGeneration = useRef(0);
   const apiUrl = config.apiUrl;
   const preambleScanLines = config.preambleScanLines;
-  const dirty = Boolean(requestDoc && requestDoc.source !== requestDoc.savedSource);
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const activeRequest = activeTab?.kind === "request" ? activeTab : null;
   let sourceError = "";
-  if (requestDoc) {
-    try { parseChatRequest(requestDoc.source); } catch (reason) { sourceError = reason instanceof Error ? reason.message : String(reason); }
+  if (activeRequest) {
+    try { parseChatRequest(activeRequest.source); } catch (reason) { sourceError = reason instanceof Error ? reason.message : String(reason); }
   }
 
-  const confirmDiscard = useCallback(() => !dirty || window.confirm("Discard unsaved request changes?"), [dirty]);
+  const confirmDiscard = useCallback((scoped?: DocumentTab[]) => {
+    const dirtyTabs = (scoped ?? tabs).filter(isDirty);
+    if (dirtyTabs.length === 0) return true;
+    return window.confirm(dirtyTabs.length === 1 ? "Discard unsaved request changes?" : `Discard unsaved changes in ${dirtyTabs.length} request tabs?`);
+  }, [tabs]);
+
+  const abortActive = useCallback(() => {
+    requestGeneration.current += 1;
+    const requestId = activeRequestId.current;
+    activeRequestId.current = null;
+    if (requestId) void invoke("cancel_chat_completion", { requestId });
+    sendingRef.current = false;
+    setSending(false);
+  }, []);
+
+  const addTab = useCallback((tab: DocumentTab) => {
+    setTabs((current) => [...current, tab]);
+    setActiveTabId(tab.id);
+  }, []);
 
   const loadRequest = useCallback((raw: string, file?: WorkspaceFile) => {
     const source = extractJsonBody(raw, preambleScanLines);
-    const parsed = parseChatRequest(source);
-    setRequest(parsed);
-    setRequestDoc({ source, savedSource: source, path: file?.path, name: file?.name });
-    setCurrentFile(null);
-    setTab("request");
+    const request = parseChatRequest(source);
+    addTab({ id: crypto.randomUUID(), kind: "request", name: file?.name ?? "Pasted request", path: file?.path, fullPath: file?.fullPath, request, source, savedSource: source });
     setError("");
-  }, [preambleScanLines]);
+  }, [addTab, preambleScanLines]);
 
   const loadResponse = useCallback((raw: string, file?: WorkspaceFile) => {
     const isSse = file?.name.endsWith(".sse") || /^(data|event|id|):/m.test(raw);
     const response = isSse
       ? parseCompletionSse(extractSseBody(raw, preambleScanLines))
       : parseCompletionJson(extractJsonBody(raw, preambleScanLines));
-    setResponseDoc({ response, path: file?.path, name: file?.name });
-    setCurrentFile(null);
-    setTab("response");
+    addTab({ id: crypto.randomUUID(), kind: "response", name: file?.name ?? "Pasted response", path: file?.path, fullPath: file?.fullPath, response, temporary: !file, streaming: false });
     setError("");
-  }, [preambleScanLines]);
+  }, [addTab, preambleScanLines]);
 
-  const openDirectory = useCallback(async () => {
-    if (!confirmDiscard()) return;
+  const updateRequest = (id: string, next: ChatRequest) => {
+    setTabs((current) => current.map((tab) => tab.id === id && tab.kind === "request" ? { ...tab, request: next, source: formatRequest(next) } : tab));
+  };
+
+  const updateSource = (id: string, source: string) => {
+    setTabs((current) => current.map((tab) => {
+      if (tab.id !== id || tab.kind !== "request") return tab;
+      try { return { ...tab, source, request: parseChatRequest(source) }; } catch { return { ...tab, source }; }
+    }));
+  };
+
+  const saveRequest = useCallback(async (id: string) => {
+    const tab = tabs.find((item) => item.id === id);
+    if (!tab || tab.kind !== "request" || !tab.path || tab.source === tab.savedSource) return;
+    try { parseChatRequest(tab.source); } catch { return; }
     try {
-      const selected = await open({ directory: true, multiple: false, title: "Open prompt workspace" });
-      if (!selected) return;
-      const snapshot = await invoke<WorkspaceSnapshot>("open_workspace", { root: selected });
-      setWorkspace(snapshot);
-      setCurrentFile(null);
-      setRequest(null);
-      setRequestDoc(null);
-      setResponseDoc(null);
-      setSidebarOpen(true);
+      const formatted = formatRequest(tab.request);
+      await invoke("write_request_file", { path: tab.path, content: formatted });
+      setTabs((current) => current.map((item) => item.id === id && item.kind === "request" ? { ...item, source: formatted, savedSource: formatted } : item));
       setError("");
     } catch (reason) { setError(String(reason)); }
-  }, [confirmDiscard]);
+  }, [tabs]);
 
-  const closeWorkspace = useCallback(async () => {
-    if (!confirmDiscard()) return;
-    await invoke("close_workspace");
-    setWorkspace(null);
-    setCurrentFile(null);
-    setRequest(null);
-    setRequestDoc(null);
-    setResponseDoc(null);
-  }, [confirmDiscard]);
-
-  const saveRequest = useCallback(async () => {
-    if (!request || !requestDoc?.path || !dirty || sourceError) return;
+  const saveResponseFile = useCallback(async (id: string) => {
+    const tab = tabs.find((item) => item.id === id);
+    if (!tab || tab.kind !== "response") return;
+    const extension = tab.response.source === "sse" ? "sse" : "json";
+    const defaultPath = workspace ? `${workspace.root}/response.${extension}` : `response.${extension}`;
+    let target: string | null;
     try {
-      const formatted = formatRequest(request);
-      await invoke("write_request_file", { path: requestDoc.path, content: formatted });
-      setRequestDoc({ ...requestDoc, source: formatted, savedSource: formatted });
+      target = await save({ title: "Save response", defaultPath, filters: [{ name: "JSON", extensions: ["json"] }, { name: "SSE", extensions: ["sse"] }] });
+    } catch (reason) { setError(String(reason)); return; }
+    if (!target) return;
+    try {
+      const saved = await invoke<SavedFile>("save_response_file", { path: target, content: tab.response.raw });
+      setTabs((current) => current.map((item) => item.id === id && item.kind === "response" ? { ...item, name: saved.name, path: saved.path ?? undefined, fullPath: saved.fullPath, temporary: false } : item));
+      if (workspace) setWorkspace(await invoke<WorkspaceSnapshot>("list_workspace"));
       setError("");
     } catch (reason) { setError(String(reason)); }
-  }, [dirty, request, requestDoc, sourceError]);
+  }, [tabs, workspace]);
 
   const sendRequest = useCallback(async () => {
-    if (!request || !requestDoc || sourceError || !apiUrl.trim() || sending) {
-      if (!apiUrl.trim()) setSettingsOpen(true);
-      return;
-    }
+    const tab = tabs.find((item) => item.id === activeTabId);
+    if (!tab || tab.kind !== "request" || sendingRef.current) return;
+    if (!apiUrl.trim()) { setSettingsOpen(true); return; }
+    try { parseChatRequest(tab.source); } catch { return; }
     const requestId = crypto.randomUUID();
+    const responseTabId = crypto.randomUUID();
     const generation = ++requestGeneration.current;
+    sendingRef.current = true;
     activeRequestId.current = requestId;
     const parser = new CompletionSseParser();
     const channel = new Channel<string>();
     let networkRaw = "";
     setSending(true);
-    setTab("response");
-    setResponseDoc({ response: parser.snapshot(), name: "Live response" });
+    setTabs((current) => [...current, { id: responseTabId, kind: "response", name: "Response", response: parser.snapshot(), temporary: true, streaming: true }]);
+    setActiveTabId(responseTabId);
     setError("");
     channel.onmessage = (chunk) => {
       if (generation !== requestGeneration.current) return;
       networkRaw += chunk;
       parser.feed(chunk);
-      setResponseDoc({ response: parser.snapshot(), name: "Live response" });
+      setTabs((current) => current.map((item) => item.id === responseTabId && item.kind === "response" ? { ...item, response: parser.snapshot() } : item));
     };
     try {
       const completion = await invoke<{ format: "json" | "sse" }>("send_chat_completion", {
         requestId,
         url: apiUrl.trim(),
         token: apiToken,
-        payload: request,
+        payload: tab.request,
+        stream: config.stream,
         channel,
       });
       if (generation !== requestGeneration.current) return;
       const response = completion.format === "json" ? parseCompletionJson(networkRaw) : parser.finish();
-      setResponseDoc({ response, name: "Live response" });
+      setTabs((current) => current.map((item) => item.id === responseTabId && item.kind === "response" ? { ...item, response, streaming: false } : item));
     } catch (reason) {
       if (generation !== requestGeneration.current) return;
-      setResponseDoc({ response: parser.finish(), name: "Live response" });
-      setError(String(reason));
+      setTabs((current) => current.map((item) => item.id === responseTabId && item.kind === "response" ? { ...item, response: parser.finish(), streaming: false } : item));
+      const message = String(reason);
+      if (!/cancel/i.test(message)) setError(message);
     } finally {
       if (generation === requestGeneration.current) {
+        sendingRef.current = false;
         setSending(false);
         activeRequestId.current = null;
       }
     }
-  }, [apiToken, apiUrl, request, requestDoc, sending, sourceError]);
+  }, [activeTabId, apiToken, apiUrl, config.stream, tabs]);
 
   const cancelRequest = useCallback(async () => {
     if (activeRequestId.current) await invoke("cancel_chat_completion", { requestId: activeRequestId.current });
   }, []);
 
+  const closeTabIds = useCallback((ids: Set<string>, prompt = true) => {
+    const closing = tabs.filter((tab) => ids.has(tab.id));
+    if (closing.length === 0) return;
+    if (prompt && !confirmDiscard(closing)) return;
+    if (closing.some((tab) => tab.kind === "response" && tab.streaming)) abortActive();
+    const currentIndex = tabs.findIndex((tab) => tab.id === activeTabId);
+    if (activeTabId && ids.has(activeTabId)) {
+      const right = tabs.slice(currentIndex + 1).find((tab) => !ids.has(tab.id));
+      const left = [...tabs.slice(0, currentIndex)].reverse().find((tab) => !ids.has(tab.id));
+      setActiveTabId((right ?? left)?.id ?? null);
+    }
+    setTabs(tabs.filter((tab) => !ids.has(tab.id)));
+  }, [abortActive, activeTabId, confirmDiscard, tabs]);
+
+  const cycleTab = useCallback((delta: number) => {
+    if (tabs.length === 0) return;
+    const index = tabs.findIndex((tab) => tab.id === activeTabId);
+    if (index < 0) {
+      setActiveTabId((delta > 0 ? tabs[0] : tabs[tabs.length - 1]).id);
+      return;
+    }
+    setActiveTabId(tabs[(index + delta + tabs.length) % tabs.length].id);
+  }, [activeTabId, tabs]);
+
+  const openDirectory = useCallback(async () => {
+    if (!confirmDiscard()) return;
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Open prompt workspace" });
+      if (!selected) return;
+      abortActive();
+      const snapshot = await invoke<WorkspaceSnapshot>("open_workspace", { root: selected });
+      setWorkspace(snapshot);
+      setTabs([]);
+      setActiveTabId(null);
+      setSidebarOpen(true);
+      setError("");
+    } catch (reason) { setError(String(reason)); }
+  }, [abortActive, confirmDiscard]);
+
+  const closeWorkspace = useCallback(async () => {
+    if (!confirmDiscard()) return;
+    abortActive();
+    await invoke("close_workspace");
+    setWorkspace(null);
+    setTabs([]);
+    setActiveTabId(null);
+  }, [abortActive, confirmDiscard]);
+
   const handleCommand = useCallback((command: string) => {
     if (command === "toggle-sidebar") setSidebarOpen((value) => !value);
-    if (command === "show-request") setTab("request");
-    if (command === "show-response") setTab("response");
+    if (command === "next-tab") cycleTab(1);
+    if (command === "previous-tab") cycleTab(-1);
     if (command === "open-directory") void openDirectory();
     if (command === "close-workspace") void closeWorkspace();
-    if (command === "save") void saveRequest();
-    if (command === "help") setError("Open a directory or paste a request. Use ⌘1/⌘2 to switch views and ⌘S to save.");
-  }, [closeWorkspace, openDirectory, saveRequest]);
+    if (command === "save" && activeTab?.kind === "request") void saveRequest(activeTab.id);
+    if (command === "help") setError("Open a directory or paste a request. Use ⌘1–9 to switch tabs, Ctrl+Tab to cycle, and ⌘S to save.");
+  }, [activeTab, closeWorkspace, cycleTab, openDirectory, saveRequest]);
 
   useEffect(() => {
     saveConfig(config);
@@ -174,19 +245,26 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === "Tab") {
+        event.preventDefault();
+        handleCommand(event.shiftKey ? "previous-tab" : "next-tab");
+        return;
+      }
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key.toLowerCase() === "b") { event.preventDefault(); handleCommand("toggle-sidebar"); }
-      else if (event.key === "1") { event.preventDefault(); handleCommand("show-request"); }
-      else if (event.key === "2") { event.preventDefault(); handleCommand("show-response"); }
+      else if (/^[1-9]$/.test(event.key)) { const target = tabs[Number(event.key) - 1]; if (target) { event.preventDefault(); setActiveTabId(target.id); } }
       else if (event.key.toLowerCase() === "o") { event.preventDefault(); handleCommand("open-directory"); }
       else if (event.key.toLowerCase() === "s") { event.preventDefault(); handleCommand("save"); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleCommand]);
+  }, [handleCommand, tabs]);
+
+  useEffect(() => () => { requestGeneration.current += 1; }, []);
 
   const openFile = async (path: string) => {
-    if (!confirmDiscard()) return;
+    const existing = tabs.find((tab) => tab.path === path);
+    if (existing) { setActiveTabId(existing.id); return; }
     try {
       const file = await invoke<WorkspaceFile>("read_workspace_file", { path });
       if (path.endsWith(".json")) {
@@ -198,10 +276,29 @@ export default function App() {
     } catch (reason) { setError(String(reason)); }
   };
 
+  const openPasted = () => {
+    try {
+      const raw = pasteText;
+      if (/^(data|event|id|):/m.test(raw)) loadResponse(raw);
+      else {
+        const body = extractJsonBody(raw, preambleScanLines);
+        const value: unknown = JSON.parse(body);
+        if (isRecord(value) && Array.isArray(value.messages)) loadRequest(body);
+        else loadResponse(body);
+      }
+      setPasteOpen(false);
+    } catch (reason) { setError(String(reason)); }
+  };
+
   const copyPath = async (path: string) => {
     try {
       await navigator.clipboard.writeText(path);
     } catch (reason) { setError(String(reason)); }
+  };
+
+  const copyTabPath = async (tab: DocumentTab) => {
+    const value = tab.fullPath ?? tab.path;
+    if (value) await copyPath(value);
   };
 
   const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -240,28 +337,35 @@ export default function App() {
     setWorkspace(await invoke("create_workspace_entry", { parent, name, kind }));
   };
   const renameEntry = async (path: string, newName: string) => {
-    setWorkspace(await invoke("rename_workspace_entry", { path, newName }));
-    const renamed = `${path.split("/").slice(0, -1).join("/")}${path.includes("/") ? "/" : ""}${newName}`;
-    if (requestDoc?.path === path) setRequestDoc({ ...requestDoc, path: renamed, name: newName });
-    if (responseDoc?.path === path) setResponseDoc({ ...responseDoc, path: renamed, name: newName });
-    if (currentFile?.path === path) setCurrentFile({ ...currentFile, path: renamed, name: newName });
+    const snapshot = await invoke<WorkspaceSnapshot>("rename_workspace_entry", { path, newName });
+    setWorkspace(snapshot);
+    const renamedPath = `${path.split("/").slice(0, -1).join("/")}${path.includes("/") ? "/" : ""}${newName}`;
+    const fullPaths = new Map<string, string>();
+    const walk = (nodes: WorkspaceNode[]) => {
+      for (const node of nodes) {
+        if (node.kind === "file") fullPaths.set(node.path, node.fullPath);
+        walk(node.children);
+      }
+    };
+    walk(snapshot.tree);
+    setTabs((current) => current.map((tab) => {
+      if (!tab.path || (tab.path !== path && !tab.path.startsWith(`${path}/`))) return tab;
+      const nextPath = `${renamedPath}${tab.path.slice(path.length)}`;
+      return { ...tab, path: nextPath, fullPath: fullPaths.get(nextPath) ?? tab.fullPath, name: tab.path === path ? newName : tab.name };
+    }));
   };
   const deleteEntry = async (path: string) => {
-    if (requestDoc?.path && (requestDoc.path === path || requestDoc.path.startsWith(`${path}/`)) && !confirmDiscard()) return;
-    setWorkspace(await invoke("delete_workspace_entry", { path }));
-    if (requestDoc?.path && (requestDoc.path === path || requestDoc.path.startsWith(`${path}/`))) { setRequest(null); setRequestDoc(null); }
-    if (responseDoc?.path && (responseDoc.path === path || responseDoc.path.startsWith(`${path}/`))) setResponseDoc(null);
-    if (currentFile && (currentFile.path === path || currentFile.path.startsWith(`${path}/`))) setCurrentFile(null);
+    const affected = tabs.filter((tab) => tab.path && (tab.path === path || tab.path.startsWith(`${path}/`)));
+    if (affected.length > 0 && !confirmDiscard(affected)) return;
+    const snapshot = await invoke<WorkspaceSnapshot>("delete_workspace_entry", { path });
+    setWorkspace(snapshot);
+    if (affected.length > 0) closeTabIds(new Set(affected.map((tab) => tab.id)), false);
   };
 
-  const updateRequest = (next: ChatRequest) => {
-    setRequest(next);
-    if (requestDoc) setRequestDoc({ ...requestDoc, source: formatRequest(next) });
-  };
-  const updateSource = (source: string) => {
-    if (!requestDoc) return;
-    setRequestDoc({ ...requestDoc, source });
-    try { setRequest(parseChatRequest(source)); } catch { /* Keep the last valid structured request while editing. */ }
+  const openPasteDialog = () => {
+    setPasteText("");
+    setError("");
+    setPasteOpen(true);
   };
 
   return (
@@ -270,9 +374,9 @@ export default function App() {
         <div className="brand"><span className="brand-mark"><Braces size={19} /></span><span>Prompt Debugger</span><span className="version">BETA</span></div>
         <div className="header-actions">
           <button className="button button-secondary" type="button" onClick={() => void openDirectory()}><FolderOpen size={16} /> Open directory</button>
-          <button className="button button-secondary" type="button" disabled={sending} onClick={() => { if (tab === "request" && !confirmDiscard()) return; setPasteText(""); setError(""); setPasteTarget(tab); }}><Clipboard size={15} /> Paste</button>
+          <button className="button button-secondary" type="button" onClick={openPasteDialog}><Clipboard size={15} /> Paste</button>
           <button className="icon-button header-settings" type="button" aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
-          <button className={`button ${sending ? "button-danger" : "button-primary"}`} type="button" disabled={!sending && (!request || Boolean(sourceError))} onClick={() => sending ? void cancelRequest() : void sendRequest()}>{sending ? <Square size={13} /> : <Send size={15} />} {sending ? "Cancel" : "Send request"}</button>
+          <button className={`button ${sending ? "button-danger" : "button-primary"}`} type="button" disabled={!sending && (!activeRequest || Boolean(sourceError))} onClick={() => sending ? void cancelRequest() : void sendRequest()}>{sending ? <Square size={13} /> : <Send size={15} />} {sending ? "Cancel" : "Send request"}</button>
         </div>
       </header>
 
@@ -283,27 +387,41 @@ export default function App() {
             {sidebarOpen && <span>WORKSPACE</span>}
             <button className="icon-button" type="button" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"} title="Toggle sidebar (⌘B)" onClick={() => setSidebarOpen((value) => !value)}>{sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>
           </div>
-          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={(tab === "request" ? requestDoc?.path : responseDoc?.path) ?? currentFile?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onCopyPath={copyPath} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
+          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={activeTab?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onCopyPath={copyPath} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
           {sidebarOpen && <div className="sidebar-resizer" role="separator" aria-label="Resize workspace sidebar" aria-orientation="vertical" tabIndex={0} title="Drag to resize" onPointerDown={startSidebarResize} onKeyDown={resizeSidebarByKeyboard} />}
         </aside>
 
         <main className="main-panel">
-          <div className="main-toolbar">
-            <nav className="tabs" aria-label="Editor sections">
-              <button className={tab === "request" ? "tab active" : "tab"} onClick={() => setTab("request")} type="button">Request{dirty && <span className="tab-dirty" />}</button>
-              <button className={tab === "response" ? "tab active" : "tab"} onClick={() => setTab("response")} type="button">Response</button>
-            </nav>
-            <span className="shortcut-hint">⌘1 / ⌘2</span>
-          </div>
-
-          {tab === "request" && request && requestDoc ? <RequestEditor request={request} source={requestDoc.source} sourceError={sourceError} dirty={dirty} filePath={requestDoc.path} name={requestDoc.name} onChange={updateRequest} onSourceChange={updateSource} onSave={() => void saveRequest()} /> : tab === "response" && responseDoc ? <ResponseViewer response={responseDoc.response} name={responseDoc.name} streaming={sending && responseDoc.name === "Live response"} /> : currentFile ? <section className="file-preview">
-            <div className="file-preview-heading"><div><span className="eyebrow">{currentFile.name.endsWith(".sse") ? "SSE STREAM" : "JSON DOCUMENT"}</span><h1>{currentFile.name}</h1><p>{currentFile.path}</p></div><button className="icon-button" title="Close file" aria-label="Close file" onClick={() => setCurrentFile(null)}><X size={17} /></button></div>
-            <pre>{currentFile.content || "(empty file)"}</pre>
-          </section> : <section className="empty-state">
-            <div className="empty-illustration">{tab === "request" ? <Sparkles size={30} strokeWidth={1.5} /> : <Inbox size={30} strokeWidth={1.5} />}</div>
-            <h1>{tab === "request" ? "Shape a better prompt" : "Inspect every detail"}</h1>
-            <p>{tab === "request" ? "Paste an OpenAI chat completion request, or open a JSON file from your workspace." : "Run a request or import a JSON / SSE response to see its rendered content."}</p>
-            <button className="button button-secondary" type="button" onClick={() => { setPasteText(""); setError(""); setPasteTarget(tab); }}><Clipboard size={15} />{tab === "request" ? "Paste request" : "Import response"}</button>
+          <DocumentTabs
+            tabs={tabs}
+            activeId={activeTabId}
+            onSelect={setActiveTabId}
+            onClose={(id) => closeTabIds(new Set([id]))}
+            onCloseAll={() => closeTabIds(new Set(tabs.map((tab) => tab.id)))}
+            onCloseOthers={(id) => closeTabIds(new Set(tabs.filter((tab) => tab.id !== id).map((tab) => tab.id)))}
+            onCloseToRight={(id) => {
+              const index = tabs.findIndex((tab) => tab.id === id);
+              if (index >= 0) closeTabIds(new Set(tabs.slice(index + 1).map((tab) => tab.id)));
+            }}
+            onCopyPath={(tab) => void copyTabPath(tab)}
+            onSave={(id) => void saveResponseFile(id)}
+          />
+          {activeTab ? <>
+            <div className="document-bar">
+              <span className={`document-kind-label ${activeTab.kind}`}>{activeTab.kind === "request" ? "Request" : "Response"}</span>
+              <span className="document-bar-path" title={activeTab.fullPath}>{activeTab.fullPath ?? (activeTab.kind === "response" && activeTab.temporary ? "Unsaved response" : "Not saved to a file")}</span>
+            </div>
+            {activeTab.kind === "request"
+              ? <RequestEditor key={activeTab.id} request={activeTab.request} source={activeTab.source} sourceError={sourceError} dirty={isDirty(activeTab)} filePath={activeTab.path} name={activeTab.name} onChange={(next) => updateRequest(activeTab.id, next)} onSourceChange={(source) => updateSource(activeTab.id, source)} onSave={() => void saveRequest(activeTab.id)} />
+              : <ResponseViewer key={activeTab.id} response={activeTab.response} name={activeTab.name} streaming={activeTab.streaming} onSave={activeTab.temporary ? () => void saveResponseFile(activeTab.id) : undefined} />}
+          </> : <section className="empty-state">
+            <div className="empty-illustration"><Sparkles size={30} strokeWidth={1.5} /></div>
+            <h1>Open a prompt or response</h1>
+            <p>Open a JSON / SSE file from your workspace, or paste a request or response to start a new tab.</p>
+            <div className="empty-actions">
+              <button className="button button-secondary" type="button" onClick={openPasteDialog}><Clipboard size={15} />Paste request or response</button>
+              <button className="button button-secondary" type="button" onClick={() => void openDirectory()}><FolderOpen size={15} />Choose directory</button>
+            </div>
           </section>}
         </main>
       </div>
@@ -312,18 +430,20 @@ export default function App() {
         url={apiUrl}
         token={apiToken}
         preambleScanLines={preambleScanLines}
+        stream={config.stream}
         onUrlChange={(url) => setConfig((current) => ({ ...current, apiUrl: url }))}
         onTokenChange={setApiToken}
         onPreambleScanLinesChange={(lines) => setConfig((current) => ({ ...current, preambleScanLines: lines }))}
+        onStreamChange={(stream) => setConfig((current) => ({ ...current, stream }))}
         onClose={() => setSettingsOpen(false)}
       />}
-      {pasteTarget && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasteTarget(null); }}>
-        <form className="dialog paste-dialog" onSubmit={(event) => { event.preventDefault(); try { if (pasteTarget === "request") loadRequest(pasteText); else loadResponse(pasteText); setPasteTarget(null); } catch (reason) { setError(String(reason)); } }}>
-          <div className="dialog-title-row"><h2>{pasteTarget === "request" ? "Paste request JSON" : "Import response"}</h2><button type="button" className="icon-button" aria-label="Close paste dialog" onClick={() => setPasteTarget(null)}><X size={16} /></button></div>
-          <p>{pasteTarget === "request" ? "Paste a complete OpenAI Chat Completions request, including its messages array." : "Paste a complete Chat Completions JSON response or an SSE event stream."}</p>
-          <textarea autoFocus value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder={pasteTarget === "request" ? '{"model":"gpt-4o","messages":[...]}' : '{"choices":[...]} or data: {...}'} spellCheck={false} />
+      {pasteOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPasteOpen(false); }}>
+        <form className="dialog paste-dialog" onSubmit={(event) => { event.preventDefault(); openPasted(); }}>
+          <div className="dialog-title-row"><h2>Import request or response</h2><button type="button" className="icon-button" aria-label="Close paste dialog" onClick={() => setPasteOpen(false)}><X size={16} /></button></div>
+          <p>Paste an OpenAI Chat Completions request, a JSON response, or an SSE event stream. The document type is detected automatically.</p>
+          <textarea autoFocus value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder='{"messages":[...]} or data: {...}' spellCheck={false} />
           {error && <p className="field-error">{error}</p>}
-          <div className="dialog-actions"><button type="button" className="button button-secondary" onClick={() => setPasteTarget(null)}>Cancel</button><button className="button button-primary" disabled={!pasteText.trim()}><ChevronRight size={14} /> {pasteTarget === "request" ? "Open request" : "Open response"}</button></div>
+          <div className="dialog-actions"><button type="button" className="button button-secondary" onClick={() => setPasteOpen(false)}>Cancel</button><button className="button button-primary" disabled={!pasteText.trim()}><ChevronRight size={14} /> Open</button></div>
         </form>
       </div>}
     </div>
