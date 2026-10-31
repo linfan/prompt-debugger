@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { ChatMessage, ChatRequest, ToolCall } from "../../lib/openai";
 import { isRecord, messageImageCount } from "../../lib/openai";
-import { messagePreview, updateMessage } from "../../lib/request";
+import { messagePreview, reorderMessages, updateMessage } from "../../lib/request";
 import { JsonTree } from "../JsonTree";
 
 interface Props {
@@ -42,8 +42,9 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
   const [rawError, setRawError] = useState("");
   const [copied, setCopied] = useState(false);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const dragState = useRef<{ from: number; to: number; startX: number; startY: number; active: boolean } | null>(null);
+  const [dropGap, setDropGap] = useState<number | null>(null);
+  const [dropTop, setDropTop] = useState(0);
+  const dragState = useRef<{ from: number; gap: number; startX: number; startY: number; active: boolean } | null>(null);
   const suppressClick = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const message = request.messages[Math.min(selected, request.messages.length - 1)];
@@ -56,15 +57,13 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
     if (message) onChange(updateMessage(request, selected, updater));
   };
 
-  const moveMessage = (from: number, to: number) => {
-    if (from === to) return;
-    const messages = [...request.messages];
-    const [moved] = messages.splice(from, 1);
-    messages.splice(to, 0, moved);
+  const moveMessage = (from: number, gap: number) => {
+    const { messages, index } = reorderMessages(request.messages, from, gap);
+    if (messages === request.messages) return;
     let nextSelected = selected;
-    if (selected === from) nextSelected = to;
-    else if (from < selected && selected <= to) nextSelected -= 1;
-    else if (to <= selected && selected < from) nextSelected += 1;
+    if (selected === from) nextSelected = index;
+    else if (from < selected && selected <= index) nextSelected -= 1;
+    else if (index <= selected && selected < from) nextSelected += 1;
     setSelected(nextSelected);
     setRawEditing(false);
     onChange({ ...request, messages });
@@ -73,25 +72,29 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
   const startRowDrag = (event: ReactPointerEvent<HTMLButtonElement>, index: number) => {
     if (event.button !== 0 || request.messages.length < 2) return;
     const { clientX: startX, clientY: startY } = event;
-    dragState.current = { from: index, to: index, startX, startY, active: false };
+    dragState.current = { from: index, gap: index, startX, startY, active: false };
     const move = (moveEvent: PointerEvent) => {
       const state = dragState.current;
-      if (!state) return;
+      const list = listRef.current;
+      if (!state || !list) return;
       if (!state.active) {
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 6) return;
         state.active = true;
         setDragFrom(state.from);
-        setDropIndex(state.from);
         document.body.style.userSelect = "none";
       }
       moveEvent.preventDefault();
-      const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>(".message-list-item") ?? []);
-      let target = rows.length - 1;
+      const rows = Array.from(list.querySelectorAll<HTMLElement>(".message-list-item"));
+      const listRect = list.getBoundingClientRect();
+      let gap = rows.length;
       for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-        if (moveEvent.clientY < rows[rowIndex].getBoundingClientRect().bottom) { target = rowIndex; break; }
+        const rect = rows[rowIndex].getBoundingClientRect();
+        if (moveEvent.clientY < rect.top + rect.height / 2) { gap = rowIndex; break; }
       }
-      state.to = target;
-      setDropIndex((value) => (value === target ? value : target));
+      const edge = gap < rows.length ? rows[gap].getBoundingClientRect().top : rows[rows.length - 1].getBoundingClientRect().bottom;
+      state.gap = gap;
+      setDropGap(gap);
+      setDropTop(edge - listRect.top + list.scrollTop - 1);
     };
     const stop = () => {
       const state = dragState.current;
@@ -101,11 +104,11 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
       window.removeEventListener("pointercancel", stop);
       document.body.style.removeProperty("user-select");
       setDragFrom(null);
-      setDropIndex(null);
+      setDropGap(null);
       if (!state?.active) return;
       suppressClick.current = true;
       window.setTimeout(() => { suppressClick.current = false; }, 0);
-      moveMessage(state.from, state.to);
+      moveMessage(state.from, state.gap);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
@@ -160,7 +163,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
             const hasMeta = calls.length > 0 || images > 0;
             return <button
               key={index}
-              className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""} ${dragFrom === index ? "dragging" : ""} ${dragFrom !== null && dropIndex === index && dragFrom !== index ? "drag-over" : ""}`}
+              className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""} ${dragFrom === index ? "dragging" : ""}`}
               title="Drag to reorder"
               onPointerDown={(event) => startRowDrag(event, index)}
               onClick={() => { if (suppressClick.current) return; setSelected(index); setRawEditing(false); }}
@@ -176,6 +179,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, o
               </span>
             </button>;
           })}
+          {dragFrom !== null && dropGap !== null && <div className="message-drop-line" style={{ top: dropTop }} />}
         </div>
       </section>
 

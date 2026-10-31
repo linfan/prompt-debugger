@@ -1,5 +1,24 @@
 import { contentText, messageImageCount, parseChatRequest } from "./openai";
-import { formatRequest, updateMessage } from "./request";
+import { formatRequest, reorderMessages, updateMessage } from "./request";
+
+describe("message reordering", () => {
+  const messages = ["a", "b", "c"];
+
+  it("moves an item into the gap after the next item", () => {
+    expect(reorderMessages(messages, 0, 2)).toEqual({ messages: ["b", "a", "c"], index: 1 });
+    expect(reorderMessages(messages, 0, 3)).toEqual({ messages: ["b", "c", "a"], index: 2 });
+  });
+
+  it("moves an item into the gap before the previous item", () => {
+    expect(reorderMessages(messages, 2, 0)).toEqual({ messages: ["c", "a", "b"], index: 0 });
+    expect(reorderMessages(messages, 2, 1)).toEqual({ messages: ["a", "c", "b"], index: 1 });
+  });
+
+  it("keeps the list untouched when the gap is around the dragged item", () => {
+    expect(reorderMessages(messages, 1, 1)).toEqual({ messages, index: 1 });
+    expect(reorderMessages(messages, 1, 2)).toEqual({ messages, index: 1 });
+  });
+});
 
 describe("request editing", () => {
   it("preserves unknown request, message and part fields", () => {

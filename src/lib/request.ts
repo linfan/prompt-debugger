@@ -1,5 +1,14 @@
 import type { ChatMessage, ChatRequest } from "./openai";
 
+export function reorderMessages<T>(messages: T[], from: number, gap: number): { messages: T[]; index: number } {
+  const index = gap > from ? gap - 1 : gap;
+  if (index === from) return { messages, index };
+  const next = [...messages];
+  const [moved] = next.splice(from, 1);
+  next.splice(index, 0, moved);
+  return { messages: next, index };
+}
+
 export function updateMessage(request: ChatRequest, index: number, updater: (message: ChatMessage) => ChatMessage): ChatRequest {
   return {
     ...request,
