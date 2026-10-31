@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (universal)
+            platform: macos-latest
+            args: "--target universal-apple-darwin --bundles dmg"
+          - name: Linux (deb, rpm, AppImage)
+            platform: ubuntu-22.04
+            args: "--bundles deb,rpm,appimage"
+          - name: Windows (MSI, NSIS)
+            platform: windows-latest
+            args: "--bundles msi,nsis"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add macOS universal targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            rpm \
+            wget \
+            xdg-utils
+
+      - run: npm ci
+
+      - name: Build and upload draft release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Prompt Debugger v__VERSION__"
+          releaseBody: |
+            Draft release built from tag `${{ github.ref_name }}`.
+
+            - macOS: `.dmg`
+            - Windows: `.msi` / `-setup.exe`
+            - Linux: `.AppImage` / `.deb` / `.rpm`
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
