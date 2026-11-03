@@ -19,6 +19,7 @@ import type { ChatMessage, ChatRequest, ToolCall } from "../../lib/openai";
 import { isRecord, messageImageCount } from "../../lib/openai";
 import { messagePreview, reorderMessages, updateMessage } from "../../lib/request";
 import { JsonTree } from "../JsonTree";
+import { RequestTools } from "./RequestTools";
 
 interface Props {
   request: ChatRequest;
@@ -143,12 +144,8 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
     });
   };
 
-  if (!message) {
-    return <div className="request-empty"><p>This request has no messages.</p><button className="button button-primary" onClick={() => onChange({ ...request, messages: [{ role: "user", content: "" }] })}><Plus size={15} /> Add message</button></div>;
-  }
-
-  const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
-  const imageCount = messageImageCount(message);
+  const toolCalls = message && Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const imageCount = message ? messageImageCount(message) : 0;
 
   return <div className="request-editor">
     <div className="request-config">
@@ -167,7 +164,8 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
       {sourceError && <p className="field-error">{sourceError}</p>}
     </div>}
 
-    <div className="request-columns">
+    <RequestTools tools={request.tools} />
+    {message ? <div className="request-columns">
       <section className="message-list-panel">
         <div className="panel-caption"><span>MESSAGES <b>{request.messages.length}</b></span><button className="icon-button" aria-label="Add message" title="Add message" onClick={() => { onChange({ ...request, messages: [...request.messages, { role: "user", content: "" }] }); setSelected(request.messages.length); }}><Plus size={16} /></button></div>
         <div className="message-list" ref={listRef}>
@@ -250,6 +248,6 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
           </div>}
         </div>
       </section>
-    </div>
+    </div> : <div className="request-empty"><p>This request has no messages.</p><button className="button button-primary" onClick={() => onChange({ ...request, messages: [{ role: "user", content: "" }] })}><Plus size={15} /> Add message</button></div>}
   </div>;
 }

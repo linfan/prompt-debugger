@@ -16,8 +16,20 @@ export interface ChatMessage {
   [key: string]: unknown;
 }
 
+export interface ChatTool {
+  type?: string;
+  function?: {
+    name?: string;
+    description?: string;
+    parameters?: unknown;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface ChatRequest {
   messages: ChatMessage[];
+  tools?: ChatTool[];
   [key: string]: unknown;
 }
 
@@ -59,7 +71,16 @@ export function parseChatRequest(raw: string): ChatRequest {
     }
     return message as ChatMessage;
   });
-  return { ...value, messages } as ChatRequest;
+  if (value.tools !== undefined && !Array.isArray(value.tools)) {
+    throw new Error("Request tools must be an array.");
+  }
+  const tools = value.tools?.map((tool, index) => {
+    if (!isRecord(tool) || (tool.function !== undefined && !isRecord(tool.function))) {
+      throw new Error(`Tool ${index + 1} must be an object with a function object.`);
+    }
+    return tool as ChatTool;
+  });
+  return { ...value, messages, ...(tools ? { tools } : {}) } as ChatRequest;
 }
 
 export function contentText(content: unknown): string {

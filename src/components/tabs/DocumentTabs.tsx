@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronsRight, Copy, FileCode2, Save, X, XCircle } from "lucide-react";
+import { ChevronsRight, Copy, FileCode2, Plus, Save, X, XCircle } from "lucide-react";
 import { isDirty, type DocumentTab } from "../../lib/tabs";
 
 interface Props {
   tabs: DocumentTab[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onNewTab: () => void;
   onClose: (id: string) => void;
   onCloseAll: () => void;
   onCloseOthers: (id: string) => void;
@@ -16,7 +17,7 @@ interface Props {
 
 type MenuState = { tabId: string; x: number; y: number };
 
-export function DocumentTabs({ tabs, activeId, onSelect, onClose, onCloseAll, onCloseOthers, onCloseToRight, onCopyPath, onSave }: Props) {
+export function DocumentTabs({ tabs, activeId, onSelect, onNewTab, onClose, onCloseAll, onCloseOthers, onCloseToRight, onCopyPath, onSave }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -69,32 +70,35 @@ export function DocumentTabs({ tabs, activeId, onSelect, onClose, onCloseAll, on
   const menuIndex = menuTab ? tabs.findIndex((tab) => tab.id === menuTab.id) : -1;
 
   return <>
-    <div className="document-tabs" role="tablist" aria-label="Open documents" onScroll={() => setMenu(null)}>
-      {tabs.length === 0 && <span className="document-tabs-empty">No open documents</span>}
-      {tabs.map((tab) => {
-        const active = tab.id === activeId;
-        return <div
-          key={tab.id}
-          role="tab"
-          tabIndex={0}
-          aria-selected={active}
-          className={`document-tab ${active ? "active" : ""}`}
-          title={tab.name}
-          onClick={() => onSelect(tab.id)}
-          onContextMenu={(event) => openMenu(event, tab)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onSelect(tab.id);
-            }
-          }}
-        >
-          <FileCode2 size={13} />
-          <span className="document-tab-name">{tab.name}</span>
-          {isDirty(tab) && <span className="dirty-dot" aria-label="Unsaved changes" />}
-          <button className="document-tab-close" type="button" aria-label={`Close ${tab.name}`} title="Close tab" onClick={(event) => { event.stopPropagation(); onClose(tab.id); }}><X size={12} /></button>
-        </div>;
-      })}
+    <div className="document-tabs-bar">
+      <div className="document-tabs" role="tablist" aria-label="Open documents" onScroll={() => setMenu(null)}>
+        {tabs.length === 0 && <span className="document-tabs-empty">No open documents</span>}
+        {tabs.map((tab) => {
+          const active = tab.id === activeId;
+          return <div
+            key={tab.id}
+            role="tab"
+            tabIndex={0}
+            aria-selected={active}
+            className={`document-tab ${active ? "active" : ""}`}
+            title={tab.name}
+            onClick={() => onSelect(tab.id)}
+            onContextMenu={(event) => openMenu(event, tab)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect(tab.id);
+              }
+            }}
+          >
+            <FileCode2 size={13} />
+            <span className="document-tab-name">{tab.name}</span>
+            {isDirty(tab) && <span className="dirty-dot" aria-label="Unsaved changes" />}
+            <button className="document-tab-close" type="button" aria-label={`Close ${tab.name}`} title="Close tab" onClick={(event) => { event.stopPropagation(); onClose(tab.id); }}><X size={12} /></button>
+          </div>;
+        })}
+      </div>
+      <button className="icon-button document-tab-new" type="button" aria-label="New tab" title="Paste request or response in a new tab" onClick={onNewTab}><Plus size={16} /></button>
     </div>
 
     {menu && menuTab && <div ref={menuRef} className="context-menu" role="menu" style={{ left: menuPosition.x, top: menuPosition.y }} onContextMenu={(event) => event.preventDefault()}>

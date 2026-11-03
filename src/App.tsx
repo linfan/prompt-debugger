@@ -396,6 +396,7 @@ export default function App() {
             tabs={tabs}
             activeId={activeTabId}
             onSelect={setActiveTabId}
+            onNewTab={openPasteDialog}
             onClose={(id) => closeTabIds(new Set([id]))}
             onCloseAll={() => closeTabIds(new Set(tabs.map((tab) => tab.id)))}
             onCloseOthers={(id) => closeTabIds(new Set(tabs.filter((tab) => tab.id !== id).map((tab) => tab.id)))}

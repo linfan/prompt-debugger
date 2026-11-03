@@ -19,9 +19,12 @@ try {
   await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
   await page.getByRole("button", { name: "Expand sidebar" }).click();
 
-  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
   const request = {
     model: "gpt-test",
+    tools: [
+      { type: "function", function: { name: "Read", description: "Read a file from the workspace", parameters: { type: "object", properties: { path: { type: "string", description: "Absolute file path" } }, required: ["path"] } } },
+    ],
     messages: [
       { role: "system", content: "You are a concise assistant." },
       { role: "user", content: [{ type: "text", text: "Inspect this image" }, { type: "image_url", image_url: { url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%234a88c4'/%3E%3C/svg%3E" } }] },
@@ -34,6 +37,12 @@ try {
   assert.equal(await page.locator(".document-tab").count(), 1);
   assert.equal((await page.locator(".document-kind-label").textContent())?.trim(), "Request");
   assert.equal(await page.locator(".message-list-item").count(), 3);
+  await page.locator(".request-tools").getByText("Read", { exact: true }).waitFor();
+  await page.locator(".request-tools").getByText("Read a file from the workspace", { exact: true }).waitFor();
+  await page.locator(".request-tools").getByText("path", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Collapse parameters", exact: true }).click();
+  await page.getByRole("button", { name: "Expand parameters", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Expand parameters", exact: true }).click();
   await page.locator(".message-list-item").nth(1).click();
   await page.locator(".message-identity .image-count").waitFor();
   await page.locator(".request-config input").fill("gpt-edited");
@@ -51,7 +60,7 @@ try {
   assert.equal(await page.locator(".function-call-card").count(), 2);
   await page.screenshot({ path: "/tmp/prompt-debugger-request.png", fullPage: true });
 
-  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
   const events = [
     { choices: [{ index: 0, delta: { reasoning_content: "Check the request first.", content: "Streamed " } }] },
     { choices: [{ index: 0, delta: { content: "content", tool_calls: [{ index: 0, id: "call_2", function: { name: "Grep", arguments: "{\"pattern\":\"test\"}" } }] } }] },
@@ -66,6 +75,12 @@ try {
   assert.equal((await page.locator(".document-kind-label").textContent())?.trim(), "Response");
   await page.screenshot({ path: "/tmp/prompt-debugger-response.png", fullPage: true });
 
+  await page.locator(".document-tab").first().click();
+  assert.equal(await page.locator(".request-config input").inputValue(), "gpt-edited");
+  await page.locator(".request-tools").getByText("Read a file from the workspace", { exact: true }).waitFor();
+  await page.locator(".document-tab").nth(1).click();
+  await page.getByText("Streamed content").waitFor();
+
   await page.locator(".document-tab").first().hover();
   await page.locator(".document-tab").first().locator(".document-tab-close").click();
   assert.equal(await page.locator(".document-tab").count(), 1);
@@ -77,6 +92,13 @@ try {
   await page.getByText("Open a prompt or response").waitFor();
   assert.equal(await page.locator(".document-tab").count(), 0);
 
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.locator(".paste-dialog textarea").fill("{");
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.locator(".paste-dialog .field-error").waitFor();
+  assert.equal(await page.locator(".document-tab").count(), 0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByLabel("API URL").fill("http://localhost:18080/v1/chat/completions");
   await page.locator("#api-token").fill("ui-test-token");
@@ -87,7 +109,7 @@ try {
   await page.getByRole("button", { name: "Done" }).click();
 
   assert.deepEqual(errors, []);
-  console.log("UI smoke passed: sidebar, document tabs, request editing, tool role, function calls, image count, JSON tree, SSE response, tab context menu, settings.");
+  console.log("UI smoke passed: sidebar, new document tabs, tab switching, request tools, request editing, tool role, function calls, image count, JSON tree, SSE response, invalid paste, tab context menu, settings.");
   console.log("Screenshots: /tmp/prompt-debugger-home.png /tmp/prompt-debugger-request.png /tmp/prompt-debugger-response.png");
 } finally {
   await browser.close();
