@@ -33,12 +33,14 @@ describe("app shell", () => {
     openRequest("second-model", "Second request", "second_tool");
     expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(screen.getByDisplayValue("Second request")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     expect(screen.getByText("second_tool")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("tab")[0]);
     expect(screen.getByDisplayValue("First request")).toBeInTheDocument();
-    expect(screen.getByText("first_tool")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Second request")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByText("first_tool")).toBeInTheDocument();
   });
 
   it("keeps the current tabs when pasted text cannot be parsed", () => {

@@ -137,17 +137,18 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .request-source { flex: 0 0 240px; display: flex; flex-direction: column; padding: 11px 17px; border-bottom: 1px solid var(--border); background: #f7f9fc; }
 .request-source > div { display: flex; align-items: center; justify-content: space-between; color: #8d99a7; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
 .request-source textarea { flex: 1; resize: none; padding: 10px; border: 1px solid #e0e6ed; border-radius: 6px; color: #4f6175; background: white; font: 11px/1.6 "SFMono-Regular", Consolas, monospace; }
-.request-tools { flex: 0 1 auto; min-height: 0; max-height: 320px; margin: 14px 14px 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 9px; background: white; overflow: hidden; }
-.request-tools-list { min-height: 0; padding: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; gap: 10px; overflow: auto; }
-.request-tool-card { min-width: 0; padding: 13px; border: 1px solid #e4e9ef; border-radius: 7px; background: #fafbfd; }
-.request-tool-heading { display: flex; align-items: center; gap: 7px; color: #4a708f; }
-.request-tool-heading h3 { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #365b78; font-size: 13px; font-weight: 600; }
-.request-tool-heading span { margin-left: auto; padding: 2px 5px; border-radius: 4px; color: #8295a6; background: #edf3f8; font-size: 8px; }
-.request-tool-description { margin: 9px 0 12px; color: #617386; font-size: 11px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.request-tool-description.is-empty, .request-tool-empty { color: #a0aab5; font-style: italic; }
-.request-tool-parameters { padding-top: 10px; border-top: 1px solid #e8edf2; }
-.request-tool-parameters .json-tree { padding: 6px 0 0; }
-.request-tool-empty { margin: 8px 0 0; font-size: 10px; }
+.request-config-lead { min-width: 0; display: flex; align-items: center; gap: 18px; }
+.view-switch button { height: 26px; padding: 0 11px; display: inline-flex; align-items: center; gap: 5px; font-size: 10px; }
+.view-switch b { min-width: 15px; padding: 1px 4px; border-radius: 4px; color: #7d8b9c; background: #e9eef4; font-size: 8px; font-weight: 700; }
+.view-switch button.active b { color: #347dbf; background: #e4effa; }
+.tool-type-badge { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 49px; height: 23px; padding: 0 8px; border-radius: 5px; color: var(--chip); background: var(--chip-bg); font-size: 10px; font-weight: 600; }
+.tool-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #52677d; font-size: 12px; font-weight: 600; }
+.tool-param-count { margin-left: auto; color: #8c9aa9; font-size: 9px; white-space: nowrap; }
+.tool-param-summary { color: #8c9aa9; font-size: 9px; white-space: nowrap; }
+.tool-detail { gap: 20px; }
+.tool-section { display: flex; flex-direction: column; gap: 11px; }
+.tool-parameters textarea { min-height: 260px; }
+.raw-json { margin: 14px; padding: 12px; border: 1px solid #e1e7ee; border-radius: 6px; background: #fbfcfe; white-space: pre-wrap; word-break: break-word; color: #4c6175; font: 11px/1.65 "SFMono-Regular", Consolas, monospace; }
 .request-columns { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 36%) 1fr; gap: 12px; padding: 14px; }
 .message-list-panel, .message-detail-panel { min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 9px; background: white; overflow: hidden; }
 .message-list-panel { display: flex; flex-direction: column; }

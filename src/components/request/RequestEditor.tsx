@@ -15,7 +15,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import type { ChatMessage, ChatRequest, ToolCall } from "../../lib/openai";
+import type { ChatMessage, ChatRequest, ChatTool, ToolCall } from "../../lib/openai";
 import { isRecord, messageImageCount } from "../../lib/openai";
 import { messagePreview, reorderMessages, updateMessage } from "../../lib/request";
 import { JsonTree } from "../JsonTree";
@@ -37,6 +37,8 @@ const roles = ["system", "user", "assistant", "tool"];
 
 export function RequestEditor({ request, source, sourceError, dirty, filePath, name, onChange, onSourceChange, onSave }: Props) {
   const [selected, setSelected] = useState(0);
+  const [view, setView] = useState<"messages" | "tools">("messages");
+  const [selectedTool, setSelectedTool] = useState(0);
   const [mode, setMode] = useState<"rendered" | "raw">("rendered");
   const [sourceOpen, setSourceOpen] = useState(false);
   const [rawEditing, setRawEditing] = useState(false);
@@ -50,10 +52,15 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
   const suppressClick = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const message = request.messages[Math.min(selected, request.messages.length - 1)];
+  const tools = request.tools ?? [];
 
   useEffect(() => {
     if (selected >= request.messages.length) setSelected(Math.max(0, request.messages.length - 1));
   }, [request.messages.length, selected]);
+
+  useEffect(() => {
+    if (selectedTool >= tools.length) setSelectedTool(Math.max(0, tools.length - 1));
+  }, [selectedTool, tools.length]);
 
   const updateCurrent = (updater: (message: ChatMessage) => ChatMessage) => {
     if (message) onChange(updateMessage(request, selected, updater));
@@ -144,12 +151,28 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
     });
   };
 
+  const updateTools = (next: ChatTool[]) => {
+    onChange({ ...request, tools: next.length ? next : undefined });
+  };
+
+  const addTool = () => {
+    const next: ChatTool[] = [...tools, { type: "function", function: { name: "new_tool", description: "", parameters: { type: "object", properties: {}, required: [] } } }];
+    updateTools(next);
+    setSelectedTool(next.length - 1);
+  };
+
   const toolCalls = message && Array.isArray(message.tool_calls) ? message.tool_calls : [];
   const imageCount = message ? messageImageCount(message) : 0;
 
   return <div className="request-editor">
     <div className="request-config">
-      <div className="document-title"><span className="status-dot" /><span>{name ?? "Chat completion request"}</span></div>
+      <div className="request-config-lead">
+        <div className="document-title"><span className="status-dot" /><span>{name ?? "Chat completion request"}</span></div>
+        <div className="segmented view-switch" role="group" aria-label="Request view">
+          <button type="button" className={view === "messages" ? "active" : ""} aria-pressed={view === "messages"} onClick={() => setView("messages")}>Messages</button>
+          <button type="button" className={view === "tools" ? "active" : ""} aria-pressed={view === "tools"} onClick={() => setView("tools")}>Tools{tools.length > 0 && <b aria-hidden="true">{tools.length}</b>}</button>
+        </div>
+      </div>
       <div className="request-config-controls">
         <label>MODEL<input value={typeof request.model === "string" ? request.model : ""} onChange={(event) => onChange({ ...request, model: event.target.value })} placeholder="Model name" /></label>
         <div className="request-config-actions">
@@ -164,8 +187,10 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
       {sourceError && <p className="field-error">{sourceError}</p>}
     </div>}
 
-    <RequestTools tools={request.tools} />
-    {message ? <div className="request-columns">
+    {view === "tools" && (tools.length > 0
+      ? <RequestTools tools={tools} selected={selectedTool} onSelect={setSelectedTool} onChange={updateTools} onAdd={addTool} />
+      : <div className="request-empty"><p>This request has no tools.</p><button className="button button-primary" onClick={addTool}><Plus size={15} /> Add tool</button></div>)}
+    {view === "messages" && (message ? <div className="request-columns">
       <section className="message-list-panel">
         <div className="panel-caption"><span>MESSAGES <b>{request.messages.length}</b></span><button className="icon-button" aria-label="Add message" title="Add message" onClick={() => { onChange({ ...request, messages: [...request.messages, { role: "user", content: "" }] }); setSelected(request.messages.length); }}><Plus size={16} /></button></div>
         <div className="message-list" ref={listRef}>
@@ -248,6 +273,6 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
           </div>}
         </div>
       </section>
-    </div> : <div className="request-empty"><p>This request has no messages.</p><button className="button button-primary" onClick={() => onChange({ ...request, messages: [{ role: "user", content: "" }] })}><Plus size={15} /> Add message</button></div>}
+    </div> : <div className="request-empty"><p>This request has no messages.</p><button className="button button-primary" onClick={() => onChange({ ...request, messages: [{ role: "user", content: "" }] })}><Plus size={15} /> Add message</button></div>)}
   </div>;
 }

@@ -33,16 +33,21 @@ try {
   };
   await page.locator(".paste-dialog textarea").fill(JSON.stringify(request));
   await page.getByRole("button", { name: "Open", exact: true }).click();
-  await page.getByText("MESSAGES").waitFor();
+  await page.locator(".message-list-panel").waitFor();
   assert.equal(await page.locator(".document-tab").count(), 1);
   assert.equal((await page.locator(".document-kind-label").textContent())?.trim(), "Request");
   assert.equal(await page.locator(".message-list-item").count(), 3);
-  await page.locator(".request-tools").getByText("Read", { exact: true }).waitFor();
-  await page.locator(".request-tools").getByText("Read a file from the workspace", { exact: true }).waitFor();
-  await page.locator(".request-tools").getByText("path", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Collapse parameters", exact: true }).click();
-  await page.getByRole("button", { name: "Expand parameters", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Expand parameters", exact: true }).click();
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
+  const toolRegion = page.getByRole("region", { name: "Request tools" });
+  const toolList = toolRegion.locator(".message-list");
+  await toolList.getByText("Read", { exact: true }).waitFor();
+  await toolList.getByText("Read a file from the workspace", { exact: true }).waitFor();
+  await toolList.getByText("1 param", { exact: true }).waitFor();
+  assert.ok((await page.getByLabel("PARAMETERS JSON").inputValue()).includes('"path"'));
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await toolRegion.getByText("TOOL JSON", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Rendered", exact: true }).click();
+  await page.getByRole("button", { name: "Messages", exact: true }).click();
   await page.locator(".message-list-item").nth(1).click();
   await page.locator(".message-identity .image-count").waitFor();
   await page.locator(".request-config input").fill("gpt-edited");
@@ -77,7 +82,9 @@ try {
 
   await page.locator(".document-tab").first().click();
   assert.equal(await page.locator(".request-config input").inputValue(), "gpt-edited");
-  await page.locator(".request-tools").getByText("Read a file from the workspace", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
+  await page.getByRole("region", { name: "Request tools" }).locator(".message-list").getByText("Read a file from the workspace", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Messages", exact: true }).click();
   await page.locator(".document-tab").nth(1).click();
   await page.getByText("Streamed content").waitFor();
 
