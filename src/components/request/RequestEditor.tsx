@@ -169,8 +169,8 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
       <div className="request-config-lead">
         <div className="document-title"><span className="status-dot" /><span>{name ?? "Chat completion request"}</span></div>
         <div className="segmented view-switch" role="group" aria-label="Request view">
-          <button type="button" className={view === "messages" ? "active" : ""} aria-pressed={view === "messages"} onClick={() => setView("messages")}>Messages</button>
-          <button type="button" className={view === "tools" ? "active" : ""} aria-pressed={view === "tools"} onClick={() => setView("tools")}>Tools{tools.length > 0 && <b aria-hidden="true">{tools.length}</b>}</button>
+          <button type="button" className={view === "messages" ? "active" : ""} aria-pressed={view === "messages"} onClick={() => setView("messages")}>Messages<b aria-hidden="true">{request.messages.length}</b></button>
+          <button type="button" className={view === "tools" ? "active" : ""} aria-pressed={view === "tools"} onClick={() => setView("tools")}>Tools<b aria-hidden="true">{tools.length}</b></button>
         </div>
       </div>
       <div className="request-config-controls">

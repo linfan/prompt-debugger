@@ -43,7 +43,7 @@ try {
   await toolList.getByText("Read", { exact: true }).waitFor();
   await toolList.getByText("Read a file from the workspace", { exact: true }).waitFor();
   await toolList.getByText("1 param", { exact: true }).waitFor();
-  assert.ok((await page.getByLabel("PARAMETERS JSON").inputValue()).includes('"path"'));
+  assert.ok((await page.getByRole("textbox", { name: "Parameters", exact: true }).inputValue()).includes('"path"'));
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await toolRegion.getByText("TOOL JSON", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Rendered", exact: true }).click();

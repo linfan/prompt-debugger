@@ -62,8 +62,8 @@ describe("request editor", () => {
 
     expect(screen.getByLabelText("TYPE")).toHaveValue("function");
     expect(screen.getByLabelText("NAME")).toHaveValue("get_weather");
-    expect(screen.getByLabelText("DESCRIPTION")).toHaveValue("Read the current weather");
-    expect(screen.getByLabelText("PARAMETERS JSON")).toHaveValue(JSON.stringify({ type: "object", properties: { location: { type: "string", description: "City name" } }, required: ["location"] }, null, 2));
+    expect(screen.getByLabelText("Description")).toHaveValue("Read the current weather");
+    expect(screen.getByLabelText("Parameters")).toHaveValue(JSON.stringify({ type: "object", properties: { location: { type: "string", description: "City name" } }, required: ["location"] }, null, 2));
 
     fireEvent.click(screen.getByRole("button", { name: "Messages" }));
     expect(screen.getByText("MESSAGES")).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe("request editor", () => {
     expect(screen.getByText("lookup")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("TYPE"), { target: { value: "custom" } });
     expect(within(screen.getByRole("region", { name: "Request tools" }).querySelector(".message-list") as HTMLElement).getAllByText("custom")).toHaveLength(1);
-    fireEvent.change(screen.getByLabelText("PARAMETERS JSON"), { target: { value: '{"type":"object","properties":{"q":{"type":"string"},"limit":{"type":"number"}}}' } });
+    fireEvent.change(screen.getByLabelText("Parameters"), { target: { value: '{"type":"object","properties":{"q":{"type":"string"},"limit":{"type":"number"}}}' } });
     expect(within(screen.getByRole("region", { name: "Request tools" }).querySelector(".message-list") as HTMLElement).getByText("2 params")).toBeInTheDocument();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Delete tool" }));

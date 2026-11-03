@@ -149,19 +149,22 @@ export function RequestTools({ tools, selected, onSelect, onChange, onAdd }: Pro
             } catch (reason) { setRawError(reason instanceof Error ? reason.message : String(reason)); }
           }} />{rawError && <p className="field-error">{rawError}</p>}</> : <pre className="raw-json">{JSON.stringify(tool, null, 2)}</pre>}
         </div> : <div className="rendered-message tool-detail">
-          <div className="tool-section">
+          <div className="tool-basics">
             <div className="section-label">TOOL</div>
             <div className="field-row">
               <label>TYPE<input value={typeof tool.type === "string" ? tool.type : ""} placeholder="function" onChange={(event) => updateTool((current) => ({ ...current, type: event.target.value }))} /></label>
               <label>NAME<input value={typeof tool.function?.name === "string" ? tool.function.name : ""} placeholder="tool_name" onChange={(event) => setFunctionField("name", event.target.value)} /></label>
             </div>
-            <label className="content-field compact">DESCRIPTION<textarea value={toolDescription(tool)} placeholder="Describe when the model should call this tool" onChange={(event) => setFunctionField("description", event.target.value)} /></label>
           </div>
-          <div className="tool-section">
+          <div className="content-field tool-field">
+            <div className="section-label">DESCRIPTION</div>
+            <textarea aria-label="Description" value={toolDescription(tool)} placeholder="Describe when the model should call this tool" onChange={(event) => setFunctionField("description", event.target.value)} />
+          </div>
+          <div className="content-field tool-field tool-parameters">
             <div className="section-label">PARAMETERS <span>{parameterSummary(tool)}</span></div>
-            <label className="content-field compact tool-parameters">PARAMETERS JSON<textarea value={parameterDraft} spellCheck={false} placeholder='{"type": "object", "properties": {}}' onChange={(event) => changeParameters(event.target.value)} /></label>
-            {parameterError && <p className="field-error">{parameterError}</p>}
+            <textarea aria-label="Parameters" value={parameterDraft} spellCheck={false} placeholder='{"type": "object", "properties": {}}' onChange={(event) => changeParameters(event.target.value)} />
           </div>
+          {parameterError && <p className="field-error">{parameterError}</p>}
         </div>}
       </div>
     </div>
