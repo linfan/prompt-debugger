@@ -5,6 +5,7 @@ OpenAI Chat Completions 提示词调试工作台，基于 Tauri 2 + React 19 + T
 ## 功能
 
 - **工作区**：原生目录选择，仅浏览 `.json` / `.sse` 文件；右键菜单支持新建、重命名、删除与复制路径，侧栏宽度可拖拽调整，文件名过长时悬浮显示完整名称；文件与文件夹 CRUD 在 Rust 安全边界内完成，拒绝绝对路径、`..` 和符号链接逃逸。
+- **最近打开**：文件与目录的打开记录保存在应用配置目录的 `recent.json`（不使用 localStorage），通过 File → Open Recent 快速重开，菜单末尾提供清空操作。
 - **文档标签**：每个打开的文件或粘贴内容都会生成独立标签，标签宽度受控、悬浮显示完整名称，可关闭；右键支持复制路径、关闭当前/其他/右侧/全部标签，标签下方固定显示 Request / Response 与文件路径。
 - **兼容记录文件**：自动跳过文件开头的 HTTP 请求/响应头，从正文开始解析 JSON 或 SSE；扫描行数可在设置中调整（默认 50 行）并持久化。
 - **请求编辑**：粘贴或打开 Chat Completions 请求，结构化编辑消息（多模态 parts、`tool_calls`），Raw JSON 树与源码视图同步，完整保留未知字段。
@@ -66,6 +67,7 @@ src/                     React 前端
   lib/                   OpenAI 模型、SSE 解析、请求格式化、工作区封装
 src-tauri/src/           Rust 命令与窗口逻辑
   workspace.rs           工作区目录树与文件 CRUD
+  recent.rs              最近打开记录、本地存储与菜单重建
   api.rs                 Chat Completions 请求与流式转发
 scripts/ui-smoke.mjs     Playwright UI 冒烟脚本
 note/                    本地笔记与参考图（已加入 .gitignore，不纳入版本控制）

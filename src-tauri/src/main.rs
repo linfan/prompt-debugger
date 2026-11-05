@@ -1,12 +1,29 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::Emitter;
+use tauri::{AppHandle, Emitter};
 
 mod workspace;
 mod api;
+mod recent;
 
-fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+fn recent_menu(app: &AppHandle, entries: &[recent::RecentEntry]) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
+    let mut builder = SubmenuBuilder::new(app, "Open Recent");
+    if entries.is_empty() {
+        let empty = MenuItemBuilder::with_id("recent-empty", "No Recent Items").enabled(false).build(app)?;
+        builder = builder.item(&empty);
+    } else {
+        for entry in entries {
+            let prefix = if entry.kind == "directory" { recent::MENU_DIRECTORY_PREFIX } else { recent::MENU_FILE_PREFIX };
+            let item = MenuItemBuilder::with_id(format!("{prefix}{}", entry.path), entry.label()).build(app)?;
+            builder = builder.item(&item);
+        }
+    }
+    let clear = MenuItemBuilder::with_id("clear-recent", "Clear Recent").build(app)?;
+    builder.separator().item(&clear).build()
+}
+
+fn build_menu(app: &AppHandle, recent_entries: &[recent::RecentEntry]) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let app_menu = SubmenuBuilder::new(app, "Prompt Debugger")
         .about(Some(AboutMetadata {
             name: Some("Prompt Debugger".into()),
@@ -27,6 +44,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
     let open = MenuItemBuilder::with_id("open-directory", "Open Directory…")
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
+    let recent_submenu = recent_menu(app, recent_entries)?;
     let save = MenuItemBuilder::with_id("save", "Save Request")
         .accelerator("CmdOrCtrl+S")
         .build(app)?;
@@ -35,6 +53,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         .build(app)?;
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&open)
+        .item(&recent_submenu)
         .item(&save)
         .separator()
         .item(&close)
@@ -95,12 +114,13 @@ fn main() {
             workspace::create_workspace_entry,
             workspace::rename_workspace_entry,
             workspace::delete_workspace_entry,
+            recent::record_recent,
+            recent::clear_recent,
             api::send_chat_completion,
             api::cancel_chat_completion,
         ])
         .setup(|app| {
-            let menu = build_menu(app)?;
-            app.set_menu(menu)?;
+            recent::install(app)?;
             Ok(())
         })
         .on_menu_event(|app, event| {

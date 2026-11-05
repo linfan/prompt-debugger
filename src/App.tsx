@@ -9,6 +9,7 @@ import { ResponseViewer } from "./components/response/ResponseViewer";
 import { ApiSettings } from "./components/settings/ApiSettings";
 import { DocumentTabs } from "./components/tabs/DocumentTabs";
 import type { WorkspaceFile, WorkspaceNode, WorkspaceSnapshot } from "./lib/workspace";
+import { isWithin, parentDirectory, relativeToRoot } from "./lib/workspace";
 import type { ChatRequest } from "./lib/openai";
 import { isRecord, parseChatRequest, parseCompletionJson } from "./lib/openai";
 import { CompletionSseParser, parseCompletionSse } from "./lib/sse";
@@ -199,20 +200,33 @@ export default function App() {
     setActiveTabId(tabs[(index + delta + tabs.length) % tabs.length].id);
   }, [activeTabId, tabs]);
 
-  const openDirectory = useCallback(async () => {
-    if (!confirmDiscard()) return;
+  const recordRecent = useCallback((path: string, kind: "file" | "directory") => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    void invoke("record_recent", { path, kind }).catch(() => {});
+  }, []);
+
+  const openWorkspaceAt = useCallback(async (root: string) => {
+    if (!confirmDiscard()) return null;
     try {
-      const selected = await open({ directory: true, multiple: false, title: "Open prompt workspace" });
-      if (!selected) return;
       abortActive();
-      const snapshot = await invoke<WorkspaceSnapshot>("open_workspace", { root: selected });
+      const snapshot = await invoke<WorkspaceSnapshot>("open_workspace", { root });
       setWorkspace(snapshot);
       setTabs([]);
       setActiveTabId(null);
       setSidebarOpen(true);
       setError("");
-    } catch (reason) { setError(String(reason)); }
+      return snapshot;
+    } catch (reason) { setError(String(reason)); return null; }
   }, [abortActive, confirmDiscard]);
+
+  const openDirectory = useCallback(async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false, title: "Open prompt workspace" });
+      if (!selected) return;
+      const snapshot = await openWorkspaceAt(selected);
+      if (snapshot) recordRecent(snapshot.root, "directory");
+    } catch (reason) { setError(String(reason)); }
+  }, [openWorkspaceAt, recordRecent]);
 
   const closeWorkspace = useCallback(async () => {
     if (!confirmDiscard()) return;
@@ -223,7 +237,56 @@ export default function App() {
     setActiveTabId(null);
   }, [abortActive, confirmDiscard]);
 
+  const loadWorkspaceFile = useCallback(async (path: string) => {
+    const file = await invoke<WorkspaceFile>("read_workspace_file", { path });
+    if (path.toLowerCase().endsWith(".json")) {
+      const body = extractJsonBody(file.content, preambleScanLines);
+      const value: unknown = JSON.parse(body);
+      if (isRecord(value) && Array.isArray(value.messages)) loadRequest(body, file);
+      else loadResponse(body, file);
+    } else loadResponse(file.content, file);
+    return file;
+  }, [loadRequest, loadResponse, preambleScanLines]);
+
+  const openFile = useCallback(async (path: string) => {
+    const existing = tabs.find((tab) => tab.path === path);
+    if (existing) { setActiveTabId(existing.id); return; }
+    try {
+      const file = await loadWorkspaceFile(path);
+      recordRecent(file.fullPath, "file");
+    } catch (reason) { setError(String(reason)); }
+  }, [loadWorkspaceFile, recordRecent, tabs]);
+
+  const openRecentFile = useCallback(async (fullPath: string) => {
+    const existing = tabs.find((tab) => tab.fullPath === fullPath);
+    if (existing) { setActiveTabId(existing.id); return; }
+    try {
+      let relative: string;
+      if (workspace && isWithin(workspace.root, fullPath)) {
+        relative = relativeToRoot(workspace.root, fullPath);
+      } else {
+        const root = parentDirectory(fullPath);
+        const snapshot = await openWorkspaceAt(root);
+        if (!snapshot) return;
+        relative = relativeToRoot(root, fullPath);
+      }
+      await loadWorkspaceFile(relative);
+      recordRecent(fullPath, "file");
+    } catch (reason) { setError(String(reason)); }
+  }, [loadWorkspaceFile, openWorkspaceAt, recordRecent, tabs, workspace]);
+
+  const openRecentDirectory = useCallback(async (path: string) => {
+    const snapshot = await openWorkspaceAt(path);
+    if (snapshot) recordRecent(snapshot.root, "directory");
+  }, [openWorkspaceAt, recordRecent]);
+
   const handleCommand = useCallback((command: string) => {
+    if (command.startsWith("recent-file:")) { void openRecentFile(command.slice("recent-file:".length)); return; }
+    if (command.startsWith("recent-directory:")) { void openRecentDirectory(command.slice("recent-directory:".length)); return; }
+    if (command === "clear-recent") {
+      void invoke("clear_recent").catch((reason) => setError(String(reason)));
+      return;
+    }
     if (command === "toggle-sidebar") setSidebarOpen((value) => !value);
     if (command === "next-tab") cycleTab(1);
     if (command === "previous-tab") cycleTab(-1);
@@ -231,7 +294,7 @@ export default function App() {
     if (command === "close-workspace") void closeWorkspace();
     if (command === "save" && activeTab?.kind === "request") void saveRequest(activeTab.id);
     if (command === "help") setError("Open a directory or paste a request. Use ⌘1–9 to switch tabs, Ctrl+Tab to cycle, and ⌘S to save.");
-  }, [activeTab, closeWorkspace, cycleTab, openDirectory, saveRequest]);
+  }, [activeTab, closeWorkspace, cycleTab, openDirectory, openRecentDirectory, openRecentFile, saveRequest]);
 
   useEffect(() => {
     saveConfig(config);
@@ -261,20 +324,6 @@ export default function App() {
   }, [handleCommand, tabs]);
 
   useEffect(() => () => { requestGeneration.current += 1; }, []);
-
-  const openFile = async (path: string) => {
-    const existing = tabs.find((tab) => tab.path === path);
-    if (existing) { setActiveTabId(existing.id); return; }
-    try {
-      const file = await invoke<WorkspaceFile>("read_workspace_file", { path });
-      if (path.endsWith(".json")) {
-        const body = extractJsonBody(file.content, preambleScanLines);
-        const value: unknown = JSON.parse(body);
-        if (isRecord(value) && Array.isArray(value.messages)) loadRequest(body, file);
-        else loadResponse(body, file);
-      } else loadResponse(file.content, file);
-    } catch (reason) { setError(String(reason)); }
-  };
 
   const openPasted = () => {
     try {
