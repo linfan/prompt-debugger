@@ -114,4 +114,31 @@ describe("request editor", () => {
     expect(screen.getByRole("region", { name: "Request tools" })).toBeInTheDocument();
     expect(screen.getByText("lonely_tool")).toBeInTheDocument();
   });
+
+  it("opens content search with Ctrl+F and cycles matches across messages", () => {
+    const multi = parseChatRequest(JSON.stringify({
+      messages: [
+        { role: "system", content: "alpha beta" },
+        { role: "user", content: "beta gamma" },
+      ],
+    }));
+    render(<EditorHarness initial={multi} />);
+
+    fireEvent.keyDown(screen.getByDisplayValue("alpha beta"), { key: "f", ctrlKey: true });
+    const input = screen.getByRole("searchbox", { name: "Find in request" });
+    fireEvent.change(input, { target: { value: "beta" } });
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("alpha beta")).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("beta gamma")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("alpha beta")).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "missing" } });
+    expect(screen.getByText("No matches")).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "Find in request" })).not.toBeInTheDocument();
+  });
 });

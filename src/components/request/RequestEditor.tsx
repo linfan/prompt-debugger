@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import {
   Braces,
   Check,
@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Search,
   Trash2,
   Wrench,
   X,
@@ -35,6 +36,57 @@ interface Props {
 
 const roles = ["system", "user", "assistant", "tool"];
 
+type FindFieldKind = "content" | "part" | "arguments";
+
+interface FindField {
+  messageIndex: number;
+  kind: FindFieldKind;
+  partIndex?: number;
+  callIndex?: number;
+  text: string;
+}
+
+interface FindMatch extends FindField {
+  start: number;
+  end: number;
+}
+
+function collectFindFields(messages: ChatMessage[]): FindField[] {
+  const fields: FindField[] = [];
+  messages.forEach((item, messageIndex) => {
+    if (typeof item.content === "string") {
+      fields.push({ messageIndex, kind: "content", text: item.content });
+    } else if (Array.isArray(item.content)) {
+      item.content.forEach((part, partIndex) => {
+        if (typeof part === "string") fields.push({ messageIndex, kind: "part", partIndex, text: part });
+        else if (isRecord(part) && typeof part.text === "string") fields.push({ messageIndex, kind: "part", partIndex, text: part.text });
+      });
+    }
+    (Array.isArray(item.tool_calls) ? item.tool_calls : []).forEach((call, callIndex) => {
+      if (typeof call.function?.arguments === "string") fields.push({ messageIndex, kind: "arguments", callIndex, text: call.function.arguments });
+    });
+  });
+  return fields;
+}
+
+function highlightPreview(text: string, query: string) {
+  if (!query) return text;
+  const haystack = text.toLocaleLowerCase();
+  const needle = query.toLocaleLowerCase();
+  const nodes: ReactNode[] = [];
+  let from = 0;
+  for (;;) {
+    const index = haystack.indexOf(needle, from);
+    if (index < 0) {
+      nodes.push(text.slice(from));
+      return nodes;
+    }
+    if (index > from) nodes.push(text.slice(from, index));
+    nodes.push(<mark key={index}>{text.slice(index, index + needle.length)}</mark>);
+    from = index + needle.length;
+  }
+}
+
 export function RequestEditor({ request, source, sourceError, dirty, filePath, name, onChange, onSourceChange, onSave }: Props) {
   const [selected, setSelected] = useState(0);
   const [view, setView] = useState<"messages" | "tools">("messages");
@@ -48,11 +100,35 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dropGap, setDropGap] = useState<number | null>(null);
   const [dropTop, setDropTop] = useState(0);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findIndex, setFindIndex] = useState(0);
   const dragState = useRef<{ from: number; gap: number; startX: number; startY: number; active: boolean } | null>(null);
   const suppressClick = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const detailScrollRef = useRef<HTMLDivElement>(null);
   const message = request.messages[Math.min(selected, request.messages.length - 1)];
   const tools = request.tools ?? [];
+  const findFields = useMemo(() => collectFindFields(request.messages), [request.messages]);
+  const findMatches = useMemo(() => {
+    if (!findOpen || !findQuery) return [];
+    const needle = findQuery.toLocaleLowerCase();
+    const matches: FindMatch[] = [];
+    for (const field of findFields) {
+      const haystack = field.text.toLocaleLowerCase();
+      let offset = 0;
+      while (offset <= haystack.length - needle.length) {
+        const start = haystack.indexOf(needle, offset);
+        if (start < 0) break;
+        matches.push({ ...field, start, end: start + needle.length });
+        offset = start + needle.length;
+      }
+    }
+    return matches;
+  }, [findFields, findOpen, findQuery]);
+  const activeFind = findMatches.length > 0 ? findMatches[Math.min(findIndex, findMatches.length - 1)] : null;
+  const activeFindKey = activeFind ? `${activeFind.messageIndex}:${activeFind.kind}:${activeFind.partIndex ?? ""}:${activeFind.callIndex ?? ""}:${activeFind.start}` : "";
 
   useEffect(() => {
     if (selected >= request.messages.length) setSelected(Math.max(0, request.messages.length - 1));
@@ -61,6 +137,71 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
   useEffect(() => {
     if (selectedTool >= tools.length) setSelectedTool(Math.max(0, tools.length - 1));
   }, [selectedTool, tools.length]);
+
+  useEffect(() => {
+    setFindIndex((index) => (findMatches.length === 0 ? 0 : Math.min(index, findMatches.length - 1)));
+  }, [findMatches.length]);
+
+  useEffect(() => {
+    if (!activeFind) return;
+    setView("messages");
+    setSelected(activeFind.messageIndex);
+  }, [activeFindKey]);
+
+  useEffect(() => {
+    if (!findOpen || !activeFind || selected !== activeFind.messageIndex) return;
+    const container = detailScrollRef.current;
+    if (!container) return;
+    const field = activeFind.kind === "content"
+      ? container.querySelector<HTMLTextAreaElement>('[data-find-field="content"]')
+      : container.querySelector<HTMLTextAreaElement>(`[data-find-field="${activeFind.kind}"][data-find-index="${activeFind.kind === "part" ? activeFind.partIndex : activeFind.callIndex}"]`);
+    if (!field) return;
+    field.setSelectionRange(activeFind.start, activeFind.end);
+    const lineHeight = Number.parseFloat(window.getComputedStyle(field).lineHeight) || 18;
+    const line = field.value.slice(0, activeFind.start).split("\n").length - 1;
+    field.scrollTop = Math.max(0, line * lineHeight - field.clientHeight / 2);
+  }, [activeFindKey, findOpen, selected, view, mode, rawEditing]);
+
+  const openFind = () => {
+    setFindOpen(true);
+    window.setTimeout(() => {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    }, 0);
+  };
+
+  const closeFind = () => {
+    setFindOpen(false);
+    setFindQuery("");
+    setFindIndex(0);
+  };
+
+  const stepFind = (delta: number) => {
+    if (findMatches.length === 0) return;
+    setFindIndex((index) => (index + delta + findMatches.length) % findMatches.length);
+  };
+
+  const onFindKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      stepFind(event.shiftKey ? -1 : 1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeFind();
+    }
+  };
+
+  const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      openFind();
+      return;
+    }
+    if (event.key === "Escape" && findOpen) {
+      event.preventDefault();
+      closeFind();
+    }
+  };
 
   const updateCurrent = (updater: (message: ChatMessage) => ChatMessage) => {
     if (message) onChange(updateMessage(request, selected, updater));
@@ -164,7 +305,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
   const toolCalls = message && Array.isArray(message.tool_calls) ? message.tool_calls : [];
   const imageCount = message ? messageImageCount(message) : 0;
 
-  return <div className="request-editor">
+  return <div className="request-editor" onKeyDown={onEditorKeyDown}>
     <div className="request-config">
       <div className="request-config-lead">
         <div className="document-title"><span className="status-dot" /><span>{name ?? "Chat completion request"}</span></div>
@@ -181,6 +322,25 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
         </div>
       </div>
     </div>
+    {findOpen && <div className="request-find" role="search" aria-label="Find in request">
+      <Search size={15} />
+      <input
+        ref={findInputRef}
+        type="search"
+        value={findQuery}
+        placeholder="Find in message content"
+        aria-label="Find in request"
+        spellCheck={false}
+        onChange={(event) => { setFindQuery(event.target.value); setFindIndex(0); }}
+        onKeyDown={onFindKeyDown}
+      />
+      <span className={`find-count ${findQuery && findMatches.length === 0 ? "is-empty" : ""}`} aria-live="polite">
+        {findQuery ? (findMatches.length === 0 ? "No matches" : `${Math.min(findIndex, findMatches.length - 1) + 1} / ${findMatches.length}`) : ""}
+      </span>
+      <button type="button" className="icon-button" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled={findMatches.length === 0} onClick={() => stepFind(-1)}><ChevronUp size={15} /></button>
+      <button type="button" className="icon-button" aria-label="Next match" title="Next match (Enter)" disabled={findMatches.length === 0} onClick={() => stepFind(1)}><ChevronDown size={15} /></button>
+      <button type="button" className="icon-button" aria-label="Close find" title="Close find (Esc)" onClick={closeFind}><X size={15} /></button>
+    </div>}
     {sourceOpen && <div className="request-source">
       <div><span>FULL REQUEST JSON</span><button className="icon-button" aria-label="Close request JSON" onClick={() => setSourceOpen(false)}><X size={14} /></button></div>
       <textarea value={source} onChange={(event) => onSourceChange(event.target.value)} spellCheck={false} />
@@ -198,9 +358,11 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
             const calls = Array.isArray(item.tool_calls) ? item.tool_calls : [];
             const images = messageImageCount(item);
             const hasMeta = calls.length > 0 || images > 0;
+            const hitCount = findOpen && findQuery ? findMatches.filter((match) => match.messageIndex === index).length : 0;
+            const isActiveHit = Boolean(activeFind && activeFind.messageIndex === index);
             return <button
               key={index}
-              className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""} ${dragFrom === index ? "dragging" : ""}`}
+              className={`message-list-item ${hasMeta ? "has-meta" : ""} ${selected === index ? "selected" : ""} ${dragFrom === index ? "dragging" : ""} ${hitCount > 0 ? "find-hit" : ""} ${isActiveHit ? "find-active" : ""}`}
               title="Drag to reorder"
               onPointerDown={(event) => startRowDrag(event, index)}
               onClick={() => { if (suppressClick.current) return; setSelected(index); setRawEditing(false); }}
@@ -212,7 +374,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
                   {calls.length > 3 && <span className="tool-more">+{calls.length - 3}</span>}
                   {images > 0 && <span className="image-count"><ImageIcon size={12} /> ×{images}</span>}
                 </span>
-                <span className="message-preview">{messagePreview(item)}</span>
+                <span className="message-preview">{highlightPreview(messagePreview(item), findOpen ? findQuery : "")}</span>
               </span>
             </button>;
           })}
@@ -238,7 +400,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
           </div>
         </div>
 
-        <div className="message-detail-scroll">
+        <div className="message-detail-scroll" ref={detailScrollRef}>
           {mode === "raw" ? <div className="message-raw">
             <div className="raw-heading"><span>MESSAGE JSON</span><button className="button button-quiet" onClick={() => { setRawEditing((value) => !value); setRawDraft(JSON.stringify(message, null, 2)); setRawError(""); }}>{rawEditing ? <Code2 size={13} /> : <Pencil size={13} />}{rawEditing ? "View tree" : "Edit JSON"}</button></div>
             {rawEditing ? <><textarea className="raw-source-editor" value={rawDraft} spellCheck={false} onChange={(event) => {
@@ -254,7 +416,7 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
           </div> : <div className="rendered-message">
             <div className="field-row"><label>ROLE<select value={message.role} onChange={(event) => updateCurrent((current) => ({ ...current, role: event.target.value }))}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>{message.role === "tool" && <label>TOOL CALL ID<input value={typeof message.tool_call_id === "string" ? message.tool_call_id : ""} placeholder="call_…" onChange={(event) => updateCurrent((current) => ({ ...current, tool_call_id: event.target.value }))} /></label>}</div>
 
-            {typeof message.content === "string" ? <label className="content-field">CONTENT<textarea value={message.content} onChange={(event) => updateCurrent((current) => ({ ...current, content: event.target.value }))} placeholder="Message content" /></label> : Array.isArray(message.content) ? <div className="content-parts"><div className="section-label">CONTENT PARTS <span>{message.content.length}</span></div>{message.content.map((part, partIndex) => {
+            {typeof message.content === "string" ? <label className="content-field">CONTENT<textarea value={message.content} data-find-field="content" onChange={(event) => updateCurrent((current) => ({ ...current, content: event.target.value }))} placeholder="Message content" /></label> : Array.isArray(message.content) ? <div className="content-parts"><div className="section-label">CONTENT PARTS <span>{message.content.length}</span></div>{message.content.map((part, partIndex) => {
               if (!isRecord(part)) return <JsonTree key={partIndex} value={part} label={`part ${partIndex}`} />;
               const image = part.type === "image_url" || part.type === "input_image" || part.type === "image";
               if (image) {
@@ -266,10 +428,10 @@ export function RequestEditor({ request, source, sourceError, dirty, filePath, n
                   return { ...current, image_url: { url: event.target.value } };
                 })} />{url && <img src={url} alt={`Message ${selected + 1}, part ${partIndex + 1}`} onError={(event) => { event.currentTarget.style.display = "none"; }} onLoad={(event) => { event.currentTarget.style.display = "block"; }} />}</div>;
               }
-              return <label className="content-field compact" key={partIndex}>TEXT PART {partIndex + 1}<textarea value={typeof part.text === "string" ? part.text : ""} onChange={(event) => updatePart(partIndex, (current) => ({ ...current, text: event.target.value }))} /></label>;
+              return <label className="content-field compact" key={partIndex}>TEXT PART {partIndex + 1}<textarea value={typeof part.text === "string" ? part.text : ""} data-find-field="part" data-find-index={partIndex} onChange={(event) => updatePart(partIndex, (current) => ({ ...current, text: event.target.value }))} /></label>;
             })}</div> : <div className="null-content"><Code2 size={16} /><span>Content is {message.content === null ? "null" : "structured"}.</span><button className="button button-quiet" onClick={() => updateCurrent((current) => ({ ...current, content: "" }))}>Convert to text</button></div>}
 
-            {(message.role === "assistant" || toolCalls.length > 0) && <div className="function-calls"><div className="section-title"><Wrench size={16} /><h3>Function Calls</h3><span>{toolCalls.length}</span>{message.role === "assistant" && <button className="button button-quiet function-add" type="button" onClick={addToolCall}><Plus size={13} />Add function call</button>}</div>{toolCalls.map((call, callIndex) => <div className="function-call-card" key={callIndex}><div className="call-number">CALL {callIndex + 1}</div><div className="call-fields"><label>FUNCTION<input value={call.function?.name ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, name: event.target.value } }))} /></label><label>ID<input value={call.id ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, id: event.target.value }))} /></label></div><label className="content-field compact">ARGUMENTS<textarea value={call.function?.arguments ?? ""} spellCheck={false} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, arguments: event.target.value } }))} /></label></div>)}</div>}
+            {(message.role === "assistant" || toolCalls.length > 0) && <div className="function-calls"><div className="section-title"><Wrench size={16} /><h3>Function Calls</h3><span>{toolCalls.length}</span>{message.role === "assistant" && <button className="button button-quiet function-add" type="button" onClick={addToolCall}><Plus size={13} />Add function call</button>}</div>{toolCalls.map((call, callIndex) => <div className="function-call-card" key={callIndex}><div className="call-number">CALL {callIndex + 1}</div><div className="call-fields"><label>FUNCTION<input value={call.function?.name ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, name: event.target.value } }))} /></label><label>ID<input value={call.id ?? ""} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, id: event.target.value }))} /></label></div><label className="content-field compact">ARGUMENTS<textarea value={call.function?.arguments ?? ""} data-find-field="arguments" data-find-index={callIndex} spellCheck={false} onChange={(event) => updateToolCall(callIndex, (current) => ({ ...current, function: { ...current.function, arguments: event.target.value } }))} /></label></div>)}</div>}
           </div>}
         </div>
       </section>

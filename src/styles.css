@@ -134,6 +134,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .request-config-actions { display: flex; gap: 7px; }
 .request-config .button { min-height: 31px; font-size: 10px; }
 .request-config .is-active { color: #3478c9; background: #edf5fd; }
+.request-find { flex: 0 0 auto; min-height: 43px; padding: 6px 18px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--border); color: #8b9aab; background: #f7fafd; }
+.request-find > svg { flex: 0 0 auto; color: #8ba0b5; }
+.request-find input { width: min(380px, 48%); height: 29px; padding: 0 9px; border: 1px solid #dce6ef; border-radius: 6px; color: #4e6175; background: white; font-size: 11px; }
+.request-find input:focus { outline: 2px solid #73a9e7; outline-offset: 1px; }
+.request-find .find-count { min-width: 64px; margin-left: 2px; color: #8c9aa9; font: 10px "SFMono-Regular", Consolas, monospace; text-align: right; }
+.request-find .find-count.is-empty { color: #b4747a; }
+.request-find .icon-button { width: 26px; height: 26px; }
 .request-source { flex: 0 0 240px; display: flex; flex-direction: column; padding: 11px 17px; border-bottom: 1px solid var(--border); background: #f7f9fc; }
 .request-source > div { display: flex; align-items: center; justify-content: space-between; color: #8d99a7; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
 .request-source textarea { flex: 1; resize: none; padding: 10px; border: 1px solid #e0e6ed; border-radius: 6px; color: #4f6175; background: white; font: 11px/1.6 "SFMono-Regular", Consolas, monospace; }
@@ -165,6 +172,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .message-list-item:hover { background: #f8fafc; }
 .message-list-item.selected { border-color: #62a2db; background: #f0f7fd; box-shadow: 0 0 0 1px #62a2db12; }
 .message-list-item.dragging { opacity: .45; }
+.message-list-item.find-hit:not(.selected) { background: #fffbea; }
+.message-list-item.find-hit:not(.selected):hover { background: #fdf6dc; }
+.message-list-item.find-active:not(.selected):not(.dragging) { box-shadow: inset 3px 0 0 #e0a936; }
+.message-preview mark { padding: 0 1px; border-radius: 2px; color: inherit; background: #ffe58a; }
+.message-list-item.selected .message-preview mark { background: #ffd75e; }
 .message-drop-line { position: absolute; left: 7px; right: 7px; height: 2px; border-radius: 2px; background: #3478c9; box-shadow: 0 0 0 3px #3478c91f; pointer-events: none; z-index: 1; }
 .message-drop-line::before, .message-drop-line::after { content: ""; position: absolute; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #3478c9; }
 .message-drop-line::before { left: -1px; }

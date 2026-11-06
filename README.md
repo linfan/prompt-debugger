@@ -11,7 +11,7 @@ OpenAI Chat Completions 提示词调试工作台，基于 Tauri 2 + React 19 + T
 - **请求编辑**：粘贴或打开 Chat Completions 请求，结构化编辑消息（多模态 parts、`tool_calls`），Raw JSON 树与源码视图同步，完整保留未知字段。
 - **响应查看**：导入普通 JSON 或 SSE 响应，按 choice 聚合 `reasoning_content`、`content` 与工具调用，提供分区卡片和 Raw 视图。
 - **实时调试**：通过 Rust `reqwest` 发送请求，Token 只保存在内存中；可在设置里选择流式或非流式发送，流式响应经 Tauri Channel 增量渲染，支持取消；每次发送会自动新建临时响应标签，可另存为 `.json` / `.sse` 文件。
-- **快捷键**：`Cmd/Ctrl+B` 折叠侧栏，`Cmd/Ctrl+1…9` 切换标签，`Ctrl+Tab` / `Ctrl+Shift+Tab` 循环切换，`Cmd/Ctrl+S` 保存请求。
+- **快捷键**：`Cmd/Ctrl+B` 折叠侧栏，`Cmd/Ctrl+1…9` 切换标签，`Ctrl+Tab` / `Ctrl+Shift+Tab` 循环切换，`Cmd/Ctrl+F` 在请求内容中查找，`Cmd/Ctrl+S` 保存请求。
 
 ## 环境要求
 
