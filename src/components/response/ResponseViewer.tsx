@@ -1,13 +1,20 @@
 import { useState } from "react";
-import { Brain, Check, ChevronDown, ChevronUp, Copy, MessageSquareText, Save, Wrench } from "lucide-react";
+import { Brain, Check, ChevronDown, ChevronRight, ChevronUp, Copy, MessageSquareText, Save, Wrench } from "lucide-react";
 import type { ResponseAggregate } from "../../lib/openai";
 import { JsonTree } from "../JsonTree";
+
+type ResponseSection = "reasoning" | "content";
 
 export function ResponseViewer({ response, name, streaming = false, onSave }: { response: ResponseAggregate; name?: string; streaming?: boolean; onSave?: () => void }) {
   const [choicePosition, setChoicePosition] = useState(0);
   const [mode, setMode] = useState<"rendered" | "raw">("rendered");
+  const [collapsed, setCollapsed] = useState<Record<ResponseSection, boolean>>({ reasoning: false, content: false });
   const [copied, setCopied] = useState("");
   const choice = response.choices[Math.min(choicePosition, Math.max(0, response.choices.length - 1))];
+
+  const toggleSection = (section: ResponseSection) => {
+    setCollapsed((current) => ({ ...current, [section]: !current[section] }));
+  };
 
   const copy = async (key: string, value: string) => {
     await navigator.clipboard.writeText(value);
@@ -36,12 +43,24 @@ export function ResponseViewer({ response, name, streaming = false, onSave }: { 
     {mode === "raw" ? <div className="response-raw">{json !== null ? <JsonTree value={json} label="response" /> : <pre>{response.raw || "No response content yet."}</pre>}</div> : <div className="response-scroll">
       {!choice ? <div className="response-empty"><MessageSquareText size={25} /><h2>No completion choices</h2><p>The response may contain an error or a non-standard payload. Check Raw for details.</p></div> : <>
         {choice.reasoningContent && <section className="response-card">
-          <header><div><Brain size={17} /><h2>Reasoning</h2></div>{copyButton("reasoning", choice.reasoningContent)}</header>
-          <pre className="response-text">{choice.reasoningContent}</pre>
+          <header>
+            <div><Brain size={17} /><h2>Reasoning</h2></div>
+            <div className="response-card-actions">
+              {copyButton("reasoning", choice.reasoningContent)}
+              <button type="button" className="icon-button" aria-expanded={!collapsed.reasoning} aria-label={collapsed.reasoning ? "Expand reasoning" : "Collapse reasoning"} title={collapsed.reasoning ? "Expand reasoning" : "Collapse reasoning"} onClick={() => toggleSection("reasoning")}>{collapsed.reasoning ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</button>
+            </div>
+          </header>
+          {!collapsed.reasoning && <pre className="response-text">{choice.reasoningContent}</pre>}
         </section>}
         {choice.content && <section className="response-card">
-          <header><div><MessageSquareText size={17} /><h2>Content</h2></div>{copyButton("content", choice.content)}</header>
-          <pre className="response-text">{choice.content}</pre>
+          <header>
+            <div><MessageSquareText size={17} /><h2>Content</h2></div>
+            <div className="response-card-actions">
+              {copyButton("content", choice.content)}
+              <button type="button" className="icon-button" aria-expanded={!collapsed.content} aria-label={collapsed.content ? "Expand content" : "Collapse content"} title={collapsed.content ? "Expand content" : "Collapse content"} onClick={() => toggleSection("content")}>{collapsed.content ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</button>
+            </div>
+          </header>
+          {!collapsed.content && <pre className="response-text">{choice.content}</pre>}
         </section>}
         {choice.toolCalls.length > 0 && <section className="response-card">
           <header><div><Wrench size={17} /><h2>Function Calls</h2><span className="card-count">{choice.toolCalls.length}</span></div>{copyButton("tool calls", choice.toolCalls.map((call) => `${call.name}(${call.arguments})`).join("\n"))}</header>

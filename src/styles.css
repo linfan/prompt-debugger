@@ -275,6 +275,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .response-card + .response-card { margin-top: 13px; }
 .response-card > header { min-height: 44px; padding: 8px 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #edf0f4; }
 .response-card > header > div { display: flex; align-items: center; gap: 7px; color: #4e708f; }
+.response-card > header > .response-card-actions { gap: 2px; }
+.response-card-actions .icon-button { width: 26px; height: 26px; }
 .response-card h2 { margin: 0; color: #3e566e; font-size: 13px; font-weight: 610; }
 .card-count { min-width: 17px; padding: 2px 5px; border-radius: 4px; color: #8294a4; background: #eef2f6; font-size: 8px; text-align: center; }
 .response-text { margin: 0; padding: 15px 17px 18px; white-space: pre-wrap; word-break: break-word; color: #4c6073; font: 11px/1.8 "SFMono-Regular", Consolas, monospace; }
