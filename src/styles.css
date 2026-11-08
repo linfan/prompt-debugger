@@ -80,6 +80,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .document-bar { height: 31px; flex: 0 0 31px; padding: 0 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); background: #fbfcfd; }
 .document-kind-label { flex: 0 0 auto; padding: 2px 7px; border-radius: 4px; color: #3475bb; background: #eaf2fb; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .document-kind-label.response { color: #2f7f62; background: #eaf6f0; }
+.document-kind-label.text { color: #6d7885; background: #f0f2f5; }
+.text-file { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 25px; }
+.text-file > pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #52667a; font: 11px/1.75 "SFMono-Regular", Consolas, monospace; }
 .document-bar-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9aa5b3; font: 10px "SFMono-Regular", Consolas, monospace; }
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; }
 .empty-illustration { width: 68px; height: 68px; border: 1px solid #e0e8f1; border-radius: 19px; display: grid; place-items: center; color: #6092c5; background: linear-gradient(145deg, #fff, #edf4fb); box-shadow: 0 8px 30px #587da114; }

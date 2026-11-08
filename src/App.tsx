@@ -249,16 +249,25 @@ export default function App() {
   }, [loadRequest, loadResponse, preambleScanLines]);
 
   const openFile = useCallback(async (path: string) => {
-    const existing = tabs.find((tab) => tab.path === path);
+    const existing = tabs.find((tab) => tab.kind !== "text" && tab.path === path);
     if (existing) { setActiveTabId(existing.id); return; }
     try {
-      const file = await loadWorkspaceFile(path);
-      recordRecent(file.fullPath, "file");
+      await loadWorkspaceFile(path);
     } catch (reason) { setError(String(reason)); }
-  }, [loadWorkspaceFile, recordRecent, tabs]);
+  }, [loadWorkspaceFile, tabs]);
+
+  const openTextFile = useCallback(async (path: string) => {
+    const existing = tabs.find((tab) => tab.kind === "text" && tab.path === path);
+    if (existing) { setActiveTabId(existing.id); return; }
+    try {
+      const file = await invoke<WorkspaceFile>("read_workspace_file", { path });
+      addTab({ id: crypto.randomUUID(), kind: "text", name: file.name, path: file.path, fullPath: file.fullPath, content: file.content });
+      setError("");
+    } catch (reason) { setError(String(reason)); }
+  }, [addTab, tabs]);
 
   const openRecentFile = useCallback(async (fullPath: string) => {
-    const existing = tabs.find((tab) => tab.fullPath === fullPath);
+    const existing = tabs.find((tab) => tab.kind !== "text" && tab.fullPath === fullPath);
     if (existing) { setActiveTabId(existing.id); return; }
     try {
       let relative: string;
@@ -271,14 +280,12 @@ export default function App() {
         relative = relativeToRoot(root, fullPath);
       }
       await loadWorkspaceFile(relative);
-      recordRecent(fullPath, "file");
     } catch (reason) { setError(String(reason)); }
-  }, [loadWorkspaceFile, openWorkspaceAt, recordRecent, tabs, workspace]);
+  }, [loadWorkspaceFile, openWorkspaceAt, tabs, workspace]);
 
   const openRecentDirectory = useCallback(async (path: string) => {
-    const snapshot = await openWorkspaceAt(path);
-    if (snapshot) recordRecent(snapshot.root, "directory");
-  }, [openWorkspaceAt, recordRecent]);
+    await openWorkspaceAt(path);
+  }, [openWorkspaceAt]);
 
   const handleCommand = useCallback((command: string) => {
     if (command.startsWith("recent-file:")) { void openRecentFile(command.slice("recent-file:".length)); return; }
@@ -436,7 +443,7 @@ export default function App() {
             {sidebarOpen && <span>WORKSPACE</span>}
             <button className="icon-button" type="button" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"} title="Toggle sidebar (⌘B)" onClick={() => setSidebarOpen((value) => !value)}>{sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>
           </div>
-          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={activeTab?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onCopyPath={copyPath} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
+          {sidebarOpen ? <WorkspaceSidebar workspace={workspace} currentPath={activeTab?.path} onOpenDirectory={() => void openDirectory()} onOpenFile={(path) => void openFile(path)} onOpenText={(path) => void openTextFile(path)} onCreate={createEntry} onRename={renameEntry} onDelete={deleteEntry} onCopyPath={copyPath} onRefresh={async () => { if (workspace) setWorkspace(await invoke("list_workspace")); }} /> : <button className="collapsed-action" type="button" aria-label="Open directory" title="Open directory" onClick={() => void openDirectory()}><FolderOpen size={18} /></button>}
           {sidebarOpen && <div className="sidebar-resizer" role="separator" aria-label="Resize workspace sidebar" aria-orientation="vertical" tabIndex={0} title="Drag to resize" onPointerDown={startSidebarResize} onKeyDown={resizeSidebarByKeyboard} />}
         </aside>
 
@@ -458,12 +465,14 @@ export default function App() {
           />
           {activeTab ? <>
             <div className="document-bar">
-              <span className={`document-kind-label ${activeTab.kind}`}>{activeTab.kind === "request" ? "Request" : "Response"}</span>
+              <span className={`document-kind-label ${activeTab.kind}`}>{activeTab.kind === "request" ? "Request" : activeTab.kind === "response" ? "Response" : "Text"}</span>
               <span className="document-bar-path" title={activeTab.fullPath}>{activeTab.fullPath ?? (activeTab.kind === "response" && activeTab.temporary ? "Unsaved response" : "Not saved to a file")}</span>
             </div>
             {activeTab.kind === "request"
               ? <RequestEditor key={activeTab.id} request={activeTab.request} source={activeTab.source} sourceError={sourceError} dirty={isDirty(activeTab)} filePath={activeTab.path} name={activeTab.name} onChange={(next) => updateRequest(activeTab.id, next)} onSourceChange={(source) => updateSource(activeTab.id, source)} onSave={() => void saveRequest(activeTab.id)} />
-              : <ResponseViewer key={activeTab.id} response={activeTab.response} name={activeTab.name} streaming={activeTab.streaming} onSave={activeTab.temporary ? () => void saveResponseFile(activeTab.id) : undefined} />}
+              : activeTab.kind === "response"
+                ? <ResponseViewer key={activeTab.id} response={activeTab.response} name={activeTab.name} streaming={activeTab.streaming} onSave={activeTab.temporary ? () => void saveResponseFile(activeTab.id) : undefined} />
+                : <div className="text-file"><pre>{activeTab.content}</pre></div>}
           </> : <section className="empty-state">
             <div className="empty-illustration"><Sparkles size={30} strokeWidth={1.5} /></div>
             <h1>Open a prompt or response</h1>

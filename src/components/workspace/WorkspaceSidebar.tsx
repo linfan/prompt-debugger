@@ -5,6 +5,7 @@ import {
   Copy,
   FileCode2,
   FilePlus2,
+  FileText,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -28,6 +29,7 @@ interface Props {
   currentPath?: string;
   onOpenDirectory: () => void;
   onOpenFile: (path: string) => void;
+  onOpenText: (path: string) => void;
   onCreate: (parent: string, name: string, kind: "file" | "directory") => Promise<void>;
   onRename: (path: string, name: string) => Promise<void>;
   onDelete: (path: string) => Promise<void>;
@@ -35,7 +37,7 @@ interface Props {
   onRefresh: () => Promise<void>;
 }
 
-export function WorkspaceSidebar({ workspace, currentPath, onOpenDirectory, onOpenFile, onCreate, onRename, onDelete, onCopyPath, onRefresh }: Props) {
+export function WorkspaceSidebar({ workspace, currentPath, onOpenDirectory, onOpenFile, onOpenText, onCreate, onRename, onDelete, onCopyPath, onRefresh }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [name, setName] = useState("");
@@ -180,9 +182,12 @@ export function WorkspaceSidebar({ workspace, currentPath, onOpenDirectory, onOp
     <div className="sidebar-footer">JSON · SSE</div>
 
     {menu && <div ref={menuRef} className="context-menu" role="menu" style={{ left: menuPosition.x, top: menuPosition.y }} onContextMenu={(event) => event.preventDefault()}>
-      {menu.node.kind === "directory" && <>
+      {menu.node.kind === "directory" ? <>
         <button role="menuitem" type="button" onClick={() => runMenuAction(() => { expand(menu.node.path); openDialog({ mode: "file", parent: menu.node.path }); })}><FilePlus2 size={13} />New file</button>
         <button role="menuitem" type="button" onClick={() => runMenuAction(() => { expand(menu.node.path); openDialog({ mode: "directory", parent: menu.node.path }); })}><FolderPlus size={13} />New folder</button>
+        <div className="context-menu-separator" role="separator" />
+      </> : <>
+        <button role="menuitem" type="button" onClick={() => runMenuAction(() => onOpenText(menu.node.path))}><FileText size={13} />Open as text</button>
         <div className="context-menu-separator" role="separator" />
       </>}
       <button role="menuitem" type="button" onClick={() => runMenuAction(() => openDialog({ mode: "rename", node: menu.node, parent: "" }))}><Pencil size={13} />Rename</button>

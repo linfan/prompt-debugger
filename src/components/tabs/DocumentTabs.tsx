@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronsRight, Copy, FileCode2, Plus, Save, X, XCircle } from "lucide-react";
+import { ChevronsRight, Copy, FileCode2, FileText, Plus, Save, X, XCircle } from "lucide-react";
 import { isDirty, type DocumentTab } from "../../lib/tabs";
 
 interface Props {
@@ -91,7 +91,7 @@ export function DocumentTabs({ tabs, activeId, onSelect, onNewTab, onClose, onCl
               }
             }}
           >
-            <FileCode2 size={13} />
+            {tab.kind === "text" ? <FileText size={13} /> : <FileCode2 size={13} />}
             <span className="document-tab-name">{tab.name}</span>
             {isDirty(tab) && <span className="dirty-dot" aria-label="Unsaved changes" />}
             <button className="document-tab-close" type="button" aria-label={`Close ${tab.name}`} title="Close tab" onClick={(event) => { event.stopPropagation(); onClose(tab.id); }}><X size={12} /></button>

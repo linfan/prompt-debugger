@@ -21,7 +21,12 @@ export interface ResponseTab extends DocumentTabBase {
   streaming: boolean;
 }
 
-export type DocumentTab = RequestTab | ResponseTab;
+export interface TextTab extends DocumentTabBase {
+  kind: "text";
+  content: string;
+}
+
+export type DocumentTab = RequestTab | ResponseTab | TextTab;
 
 export function isDirty(tab: DocumentTab): boolean {
   return tab.kind === "request" && tab.source !== tab.savedSource;

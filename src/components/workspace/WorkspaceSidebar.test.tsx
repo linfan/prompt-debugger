@@ -13,6 +13,7 @@ const renderSidebar = (overrides: Partial<React.ComponentProps<typeof WorkspaceS
     workspace={workspace}
     onOpenDirectory={() => {}}
     onOpenFile={() => {}}
+    onOpenText={() => {}}
     onCreate={vi.fn()}
     onRename={vi.fn()}
     onDelete={vi.fn()}
@@ -30,6 +31,14 @@ describe("workspace file operations", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(onDelete).not.toHaveBeenCalled();
     expect(screen.getByText("Delete entry?")).toBeInTheDocument();
+  });
+
+  it("offers opening a file as text from the context menu", () => {
+    const onOpenText = vi.fn();
+    renderSidebar({ onOpenText });
+    fireEvent.contextMenu(screen.getByText("request.json"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open as text" }));
+    expect(onOpenText).toHaveBeenCalledWith("request.json");
   });
 
   it("offers copy path from the context menu", () => {
