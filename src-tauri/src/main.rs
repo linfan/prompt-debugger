@@ -27,7 +27,7 @@ fn build_menu(app: &AppHandle, recent_entries: &[recent::RecentEntry]) -> tauri:
     let app_menu = SubmenuBuilder::new(app, "Prompt Debugger")
         .about(Some(AboutMetadata {
             name: Some("Prompt Debugger".into()),
-            version: Some("0.1.0".into()),
+            version: Some("0.2.0".into()),
             comments: Some("A focused workbench for debugging model prompts.".into()),
             ..Default::default()
         }))

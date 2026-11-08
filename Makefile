@@ -6,8 +6,12 @@ install:
 	npm install
 
 set-version:
-	@if [ -z "$(VERSION)" ]; then echo 'usage: make set-version VERSION=0.2.0'; exit 1; fi
-	node scripts/set-version.mjs "$(VERSION)"
+	@if [ -z "$(word 2,$(MAKECMDGOALS))" ]; then echo 'usage: make set-version 0.2.0'; exit 1; fi
+	node scripts/set-version.mjs "$(word 2,$(MAKECMDGOALS))"
+
+# 吞掉 set-version 后面的版本号参数，避免 make 报 "No rule to make target"
+%:
+	@:
 
 dev:
 	npm run dev
